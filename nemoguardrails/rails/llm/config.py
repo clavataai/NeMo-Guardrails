@@ -506,6 +506,32 @@ class PatronusRailConfig(BaseModel):
     )
 
 
+class ClavataOptions(BaseModel):
+    """Configuration data for the Clavata API"""
+
+    server_endpoint: str = Field(
+        default="https://gateway.app.clavata.ai:8443/v1/jobs",
+        description="The endpoint for the Clavata API",
+    )
+    policy_id: str = Field(
+        default="",
+        description="The policy ID to use for the Clavata API.",
+    )
+
+
+class ClavataConfig(BaseModel):
+    """Configuration data for the Clavata API"""
+
+    input: Optional[ClavataOptions] = Field(
+        default_factory=ClavataOptions,
+        description="Clavata configuration for an Input Guardrail",
+    )
+    output: Optional[ClavataOptions] = Field(
+        default_factory=ClavataOptions,
+        description="Clavata configuration for an Output Guardrail",
+    )
+
+
 class RailsConfigData(BaseModel):
     """Configuration data for specific rails that are supported out-of-the-box."""
 
@@ -537,6 +563,11 @@ class RailsConfigData(BaseModel):
     privateai: Optional[PrivateAIDetection] = Field(
         default_factory=PrivateAIDetection,
         description="Configuration for Private AI.",
+    )
+
+    clavata: Optional[ClavataConfig] = Field(
+        default_factory=ClavataConfig,
+        description="Configuration for Clavata.",
     )
 
 

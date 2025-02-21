@@ -1,0 +1,20 @@
+models:
+  - type: main
+    engine: openai
+    model: gpt-4
+
+rails:
+  config:
+    clavata:
+      input:
+        policy_id: "00000000-0000-0000-0000-000000000000"
+      output:
+        policy_id: "00000000-0000-0000-0000-000000000000"
+
+  input:
+    flows:
+      - clavata check input
+
+  output:
+    flows:
+      - clavata check output
