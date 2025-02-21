@@ -19,10 +19,18 @@ import logging
 import os
 import warnings
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from functools import cached_property
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple, Union
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, root_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    HttpUrl,
+    ValidationError,
+    field_validator,
+    root_validator,
+)
 from pydantic.fields import Field
 
 from nemoguardrails import utils
@@ -545,6 +553,77 @@ class PatronusRailConfig(BaseModel):
     )
 
 
+class ClavataRailOptions(BaseModel):
+    """Configuration data for the Clavata API"""
+
+    policy: str = Field(
+        description="The policy alias to use when evaluating inputs or outputs.",
+    )
+
+    labels: List[str] = Field(
+        default_factory=list,
+        description="""A list of labels to match against the policy.
+        If no labels are provided, the overall policy result will be returned.
+        If labels are provided, only hits on the provided labels will be considered a hit.""",
+    )
+
+    label_match_logic: Literal["ANY", "ALL"] = Field(
+        default="ANY",
+        description="""The logic to use when deciding whether the evaluation matched.
+        If ANY, only one of the configured labels needs to be found in the input or output.
+        If ALL, all configured labels must be found in the input or output.""",
+    )
+
+
+class ClavataPolicyAlias(BaseModel):
+    """Configuration data for a Clavata policy alias"""
+
+    alias: str = Field(
+        description="The alias for the Clavata policy.",
+    )
+
+    id: str = Field(
+        description="The ID for the Clavata policy. Obtained from the Clavata Web dashboard.",
+    )
+
+    @field_validator("id")
+    @classmethod
+    def validate_policy_id(cls, v: Any):
+        """
+        Validates that a Policy ID is provided and that it is at least the correct length
+        to be a UUIDv4.
+        """
+        if not v or len(v) != 36:
+            raise ValueError(
+                "The Policy ID must be a valid UUIDv4. "
+                "Please check your Clavata configuration."
+            )
+        return v
+
+
+class ClavataRailConfig(BaseModel):
+    """Configuration data for the Clavata API"""
+
+    server_endpoint: HttpUrl = Field(
+        default=HttpUrl("https://gateway.app.clavata.ai:8443"),
+        description="The endpoint for the Clavata API",
+    )
+
+    policies: List[ClavataPolicyAlias] = Field(
+        default_factory=list,
+        description="A list of policy aliases and their corresponding IDs.",
+    )
+
+    input: Optional[ClavataRailOptions] = Field(
+        default=None,
+        description="Clavata configuration for an Input Guardrail",
+    )
+    output: Optional[ClavataRailOptions] = Field(
+        default=None,
+        description="Clavata configuration for an Output Guardrail",
+    )
+
+
 class RailsConfigData(BaseModel):
     """Configuration data for specific rails that are supported out-of-the-box."""
 
@@ -581,6 +660,11 @@ class RailsConfigData(BaseModel):
     fiddler: Optional[FiddlerGuardrails] = Field(
         default_factory=FiddlerGuardrails,
         description="Configuration for Fiddler Guardrails.",
+    )
+
+    clavata: Optional[ClavataRailConfig] = Field(
+        default_factory=ClavataRailConfig,
+        description="Configuration for Clavata.",
     )
 
 

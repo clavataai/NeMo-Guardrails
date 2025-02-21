@@ -1,0 +1,24 @@
+models:
+  - type: main
+    engine: openai
+    model: gpt-3.5-turbo-instruct
+
+rails:
+  config:
+    clavata:
+      policies:
+        - alias: Violence
+          id: 00000000-0000-0000-0000-000000000000
+        - alias: Weapons
+          id: 00000000-0000-0000-0000-000000000000
+      input:
+        policy: Violence
+      output:
+        policy: Weapons
+
+  input:
+    flows:
+      - clavata check input
+  output:
+    flows:
+      - clavata check output
