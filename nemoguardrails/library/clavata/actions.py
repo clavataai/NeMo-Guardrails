@@ -16,28 +16,118 @@
 """Check for matches against a Clavata policy."""
 
 import logging
-import os
+import re
+from typing import TYPE_CHECKING, List, Literal, Tuple
+
+from pydantic import BaseModel, Field
 
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions import action
-from nemoguardrails.library.clavata.request import clavata_request
-from nemoguardrails.rails.llm.config import ClavataConfig
+from nemoguardrails.library.clavata.request import clavata_create_job
+from nemoguardrails.rails.llm.config import ClavataRailConfig, ClavataRailOptions
+
+from .errs import ClavataPluginAPIError, ClavataPluginValueError
+
+if TYPE_CHECKING:
+    from .request import Report, SectionReport
 
 log = logging.getLogger(__name__)
 
+VALID_RAILS = ["input", "output"]
 
-def detect_policy_match_mapping(result: bool) -> bool:
+
+is_uuid = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+class LabelResult(BaseModel):
+    """Result of a label evaluation"""
+
+    label: str = Field(description="The label that was evaluated")
+    message: str = Field(
+        description="An arbitrary message attached to the label in the policy."
+    )
+    matched: bool = Field(description="Whether the label matched the policy")
+
+    @classmethod
+    def from_section_report(cls, report: "SectionReport") -> "LabelResult":
+        """Convert a Clavata section report to a LabelResult"""
+        return cls(
+            label=report.name,
+            message=report.message,
+            matched=report.result == "OUTCOME_TRUE",
+        )
+
+
+class PolicyResult(BaseModel):
+    """Result of Clavata Policy Evaluation"""
+
+    failed: bool = Field(
+        default=False, description="Whether the policy evaluation failed"
+    )
+    policy_matched: bool = Field(
+        default=False, description="Whether any part of the policy matched the input"
+    )
+    label_matches: List[LabelResult] = Field(
+        default=[],
+        description="List of section results from the policy evaluation",
+    )
+
+    @classmethod
+    def from_report(cls, report: "Report") -> "PolicyResult":
+        """Convert a Clavata report to a PolicyResult"""
+        return cls(
+            failed=report.result == "OUTCOME_FAILED",
+            policy_matched=report.result == "OUTCOME_TRUE",
+            label_matches=[
+                LabelResult.from_section_report(report)
+                for report in report.sectionEvaluationReports
+            ],
+        )
+
+
+def _pre_run_checks(rail: str) -> None:
     """
-    Mapping for detect_benign.
-
-    Since the function returns True when the input is benign,
-    we block if result is False.
+    Perform pre-run checks to ensure the Clavata integration is configured correctly.
     """
-    return result
+    if rail not in VALID_RAILS:
+        raise ClavataPluginValueError(
+            f"Clavata can only be defined in the following flows: {VALID_RAILS}. "
+            f"The current flow, '{rail}', is not allowed."
+        )
 
 
-@action(is_system_action=True, output_mapping=detect_policy_match_mapping)
-async def detect_policy_match(source: str, text: str, config: RailsConfig, **kwargs):
+def _get_configs(
+    rail: str, config: RailsConfig
+) -> Tuple[ClavataRailConfig, ClavataRailOptions]:
+    """Get the Clavata config and flow config for the given source."""
+    clavata_config: ClavataRailConfig = getattr(config.rails.config, "clavata")
+    flow_cfg: ClavataRailOptions = getattr(clavata_config, rail)
+    return clavata_config, flow_cfg
+
+
+async def _get_policy_result(
+    text: str,
+    rail_config: ClavataRailOptions,
+    clavata_config: ClavataRailConfig,
+) -> PolicyResult:
+    """Get the policy result for the given source."""
+    endpoint = f"{clavata_config.server_endpoint}/v1/jobs"
+    job = await clavata_create_job(text, rail_config.policy_id, endpoint)
+
+    reports = [res.report for res in job.results]
+
+    try:
+        return [PolicyResult.from_report(report) for report in reports][0]
+    except IndexError as e:
+        raise ClavataPluginAPIError("No policy results in API response.") from e
+
+
+@action(name="DetectPolicyMatchAction", is_system_action=True, execute_async=True)
+async def detect_policy_match(
+    rail: Literal["input", "output"], text: str, config: RailsConfig
+) -> bool:
     """Checks whether the provided text matches the specified Clavata policy ID.
 
     Args:
@@ -48,52 +138,21 @@ async def detect_policy_match(source: str, text: str, config: RailsConfig, **kwa
     Returns:
         True if the text matches the specified Clavata policy ID, False otherwise.
     """
-    clavata_config: ClavataConfig = getattr(config.rails.config, "clavata")
-    clavata_api_key = os.environ.get("CLAVATA_API_KEY")
+    _pre_run_checks(rail)
+    clavata_config, rail_config = _get_configs(rail, config)
+    policy_result = await _get_policy_result(text, rail_config, clavata_config)
 
-    # Get the correct config based on the source
-    config_section = getattr(clavata_config, source, None)
-    if config_section is None:
-        raise ValueError(f"No Clavata configuration found for source: {source}")
+    if policy_result.failed:
+        raise ClavataPluginAPIError("Policy evaluation failed.")
 
-    server_endpoint = getattr(config_section, "server_endpoint", None)
-    policy_id = getattr(config_section, "policy_id", None)
+    labels = rail_config.labels
+    if len(labels) == 0:
+        # When labels is empty, we consider any match to be a match
+        return policy_result.policy_matched
 
-    if not clavata_api_key:
-        raise ValueError(
-            "CLAVATA_API_KEY environment variable required the Clavata integration."
-        )
-
-    if policy_id is None:
-        raise ValueError("Policy ID is required for the Clavata integration.")
-
-    if not server_endpoint:
-        raise ValueError("Server endpoint is required for the Clavata integration.")
-
-    valid_sources = ["input", "output"]
-    if source not in valid_sources:
-        raise ValueError(
-            f"Clavata can only be defined in the following flows: {valid_sources}. "
-            f"The current flow, '{source}', is not allowed."
-        )
-
-    clavata_response = await clavata_request(
-        text, policy_id, server_endpoint, clavata_api_key
+    # If labels are provided we need to match sure those specific labels are matched
+    labels_to_match = set(labels)
+    labels_matched = set(
+        lbl.label for lbl in policy_result.label_matches if lbl.matched
     )
-
-    matches = []
-    if clavata_response:
-        results = clavata_response.get("job", {}).get("results", [])
-        if results:
-            # First result is sufficient, given we are only ever sending one content item
-            first_result = results[0]
-            section_reports = first_result.get("report", {}).get(
-                "sectionEvaluationReports", []
-            )
-            matches = [
-                section["name"]
-                for section in section_reports
-                if section.get("result") == "OUTCOME_TRUE"
-            ]
-
-    return bool(matches)
+    return labels_to_match.issubset(labels_matched)

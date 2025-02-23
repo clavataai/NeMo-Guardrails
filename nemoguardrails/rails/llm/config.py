@@ -19,10 +19,18 @@ import logging
 import os
 import warnings
 from enum import Enum
+from functools import cached_property
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, root_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    HttpUrl,
+    ValidationError,
+    field_validator,
+    root_validator,
+)
 from pydantic.fields import Field
 
 from nemoguardrails import utils
@@ -506,28 +514,51 @@ class PatronusRailConfig(BaseModel):
     )
 
 
-class ClavataOptions(BaseModel):
+class ClavataRailOptions(BaseModel):
     """Configuration data for the Clavata API"""
 
-    server_endpoint: str = Field(
-        default="https://gateway.app.clavata.ai:8443/v1/jobs",
-        description="The endpoint for the Clavata API",
-    )
     policy_id: str = Field(
-        default="",
         description="The policy ID to use for the Clavata API.",
     )
 
+    labels: List[str] = Field(
+        default_factory=list,
+        description="A list of labels to match against the policy. If no labels are provided, any matched label will be considered a match",
+    )
 
-class ClavataConfig(BaseModel):
+    @field_validator("policy_id")
+    @classmethod
+    def validate_policy_id(cls, v: Any):
+        """
+        Validates that a Policy ID is provided and that it is at least the correct length
+        to be a UUIDv4.
+        """
+        if not v:
+            raise ValueError(
+                "A Policy ID is required for each flow that uses the Clavata API."
+            )
+        if len(v) != 36:
+            raise ValueError(
+                "The Policy ID must be a valid UUIDv4. "
+                "Please check your Clavata configuration."
+            )
+        return v
+
+
+class ClavataRailConfig(BaseModel):
     """Configuration data for the Clavata API"""
 
-    input: Optional[ClavataOptions] = Field(
-        default_factory=ClavataOptions,
+    server_endpoint: HttpUrl = Field(
+        default=HttpUrl("https://gateway.app.clavata.ai:8443"),
+        description="The endpoint for the Clavata API",
+    )
+
+    input: Optional[ClavataRailOptions] = Field(
+        default=None,
         description="Clavata configuration for an Input Guardrail",
     )
-    output: Optional[ClavataOptions] = Field(
-        default_factory=ClavataOptions,
+    output: Optional[ClavataRailOptions] = Field(
+        default=None,
         description="Clavata configuration for an Output Guardrail",
     )
 
@@ -565,8 +596,8 @@ class RailsConfigData(BaseModel):
         description="Configuration for Private AI.",
     )
 
-    clavata: Optional[ClavataConfig] = Field(
-        default_factory=ClavataConfig,
+    clavata: Optional[ClavataRailConfig] = Field(
+        default_factory=ClavataRailConfig,
         description="Configuration for Clavata.",
     )
 
