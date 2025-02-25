@@ -17,7 +17,8 @@
 
 import logging
 import re
-from typing import TYPE_CHECKING, List, Literal, Tuple
+import textwrap
+from typing import TYPE_CHECKING, List, Literal, Optional, Tuple, cast
 
 from pydantic import BaseModel, Field
 
@@ -107,14 +108,34 @@ def _get_configs(
     return clavata_config, flow_cfg
 
 
+def _get_policy_id(
+    clavata_config: ClavataRailConfig,
+    rail_config: Optional[ClavataRailOptions] = None,
+    policy: Optional[str] = None,
+) -> str:
+    """Get the policy ID for alias provided in the rail"""
+    if not policy and not rail_config:
+        raise ClavataPluginValueError("Policy or rail config is required.")
+
+    alias = policy or cast(ClavataRailOptions, rail_config).policy
+
+    # Sanity check even though this shouldn't be possible
+    assert alias is not None, "Alias is required."
+
+    try:
+        return [p.id for p in clavata_config.policies if p.alias == alias][0]
+    except IndexError as e:
+        raise ClavataPluginValueError(f"Policy with alias '{alias}' not found.") from e
+
+
 async def _get_policy_result(
     text: str,
-    rail_config: ClavataRailOptions,
+    policy_id: str,
     clavata_config: ClavataRailConfig,
 ) -> PolicyResult:
     """Get the policy result for the given source."""
     endpoint = f"{clavata_config.server_endpoint}/v1/jobs"
-    job = await clavata_create_job(text, rail_config.policy_id, endpoint)
+    job = await clavata_create_job(text, policy_id, endpoint)
 
     reports = [res.report for res in job.results]
 
@@ -140,7 +161,8 @@ async def detect_policy_match(
     """
     _pre_run_checks(rail)
     clavata_config, rail_config = _get_configs(rail, config)
-    policy_result = await _get_policy_result(text, rail_config, clavata_config)
+    policy_id = _get_policy_id(clavata_config, rail_config=rail_config)
+    policy_result = await _get_policy_result(text, policy_id, clavata_config)
 
     if policy_result.failed:
         raise ClavataPluginAPIError("Policy evaluation failed.")
@@ -150,9 +172,58 @@ async def detect_policy_match(
         # When labels is empty, we consider any match to be a match
         return policy_result.policy_matched
 
-    # If labels are provided we need to match sure those specific labels are matched
+    # If labels are provided we need to make sure they are matched as configured
     labels_to_match = set(labels)
     labels_matched = set(
         lbl.label for lbl in policy_result.label_matches if lbl.matched
     )
-    return labels_to_match.issubset(labels_matched)
+
+    match_all = rail_config.label_match_logic == "ALL"
+    if match_all:
+        return labels_to_match.issubset(labels_matched)
+
+    # If matching any of the labels is fine, then we can just check whether
+    # there is any intersection between the labels to match and the labels that matched
+    return bool(labels_to_match.intersection(labels_matched))
+
+
+@action(name="EvaluateUserInputWithClavataPolicy", execute_async=True)
+async def evaluate_with_clavata_policy(
+    policy: str,
+    context: Optional[dict] = None,
+    config: Optional[RailsConfig] = None,
+) -> list[str]:
+    """Evaluate the provided text against the specified Clavata policy ID and return a list of labels that matched."""
+    if not config:
+        raise ClavataPluginValueError("Rails config is required.")
+
+    if not context:
+        raise ClavataPluginValueError("Context is required.")
+
+    clavata_config = getattr(config.rails.config, "clavata")
+    if not clavata_config:
+        raise ClavataPluginValueError("Clavata config is required.")
+
+    user_input = context.get("user_input")
+    relevant_chunks = context.get("relevant_chunks")
+
+    if not user_input or not relevant_chunks:
+        raise ClavataPluginValueError("User input and relevant chunks are required.")
+
+    # Combine the user input and relevant chunks into a single string
+    text = textwrap.dedent(
+        f"""
+        Context:
+        {relevant_chunks}
+
+        User input:
+        {user_input}
+        """
+    )
+
+    # Evaluate the text against the Clavata policy
+    policy_id = _get_policy_id(clavata_config, policy=policy)
+    policy_result = await _get_policy_result(text, policy_id, clavata_config)
+
+    # Return the list of labels that matched
+    return [lbl.label for lbl in policy_result.label_matches if lbl.matched]
