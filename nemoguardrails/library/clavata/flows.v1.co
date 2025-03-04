@@ -4,7 +4,7 @@
 
 define subflow clavata check input
   """Check if the user input is benign."""
-  $is_match = execute DetectPolicyMatchAction(source="input", text=$user_message)
+  $is_match = execute DetectPolicyMatchAction(rail="input", text=$user_message)
 
   if $is_match
     bot refuse to respond
@@ -15,7 +15,7 @@ define subflow clavata check input
 
 define subflow clavata check output
   """Check if the bot output is benign."""
-  $is_match = execute DetectPolicyMatchAction(source="output", text=$bot_message)
+  $is_match = execute DetectPolicyMatchAction(rail="output", text=$bot_message)
 
   if $is_match
     bot refuse to respond

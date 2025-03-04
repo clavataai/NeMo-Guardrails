@@ -1,7 +1,7 @@
 @active
 flow clavata check input
   """Check if the user input is benign."""
-  $is_match = await DetectPolicyMatchAction(source="input", text=$user_message)
+  $is_match = await DetectPolicyMatchAction(rail="input", text=$user_message)
 
   if $is_match
     bot refuse to respond
@@ -10,7 +10,7 @@ flow clavata check input
 @active
 flow clavata check output
   """Check if the bot output is benign."""
-  $is_match = await DetectPolicyMatchAction(source="output", text=$bot_message)
+  $is_match = await DetectPolicyMatchAction(rail="output", text=$bot_message)
 
   if $is_match
     bot refuse to respond

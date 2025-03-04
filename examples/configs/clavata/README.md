@@ -1,37 +1,13 @@
-# Clavata Integration
+# Clavata Integration Example
 
-This configuration demonstrates how to integrate with the Clavata API for content moderation.
+This example demonstrates how to integrate with the [Clavata](https://clavata.ai) API for content moderation.
 
-## Configuration
+The structure of the config folder is the following:
 
-To use the Clavata integration, you must:
+- `config.yml` - The config file holding all the configuration options for Clavata integration.
 
-1. Obtain your policy ID from the Clavata platform
-2. Set the `CLAVATA_API_KEY` environment variable with your Clavata API key
-3. Add it to your `config.yml` file:
+Please see the docs for more details about:
 
-### Example Configuration
-
-```yaml
-rails:
-  config:
-    clavata:
-      input:
-        policy_id: "00000000-0000-0000-0000-000000000000"  # Replace with your actual policy ID
-      output:
-        policy_id: "00000000-0000-0000-0000-000000000000"  # Replace with your actual policy ID
-```
-
-## Flows
-
-The integration includes two main flows:
-
-- `clavata check input`: Validates user input against the specified Clavata policy
-- `clavata check output`: Validates bot responses against the specified Clavata policy
-
-## Requirements
-
-- A valid Clavata account
-- A configured policy in the Clavata platform
-- The policy ID from your Clavata configuration
-- A valid Clavata API key
+- [Full Clavata integration guide](../../../docs/user-guides/community/clavata.md)
+- [Configuration options and setup instructions](../../../docs/user-guides/community/clavata.md#setup)
+- [Error handling and best practices](../../../docs/user-guides/community/clavata.md#error-handling)
