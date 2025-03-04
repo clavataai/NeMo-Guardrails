@@ -8,8 +8,13 @@ rails:
         clavata:
             # Only provide this if you've been told to by Clavata.ai
             server_endpoint: "https://some-alt-endpoint.com"
+            policies:
+                - alias: "Violence"
+                  id: "00000000-0000-0000-0000-000000000000"
+                - alias: "Weapons"
+                  id: "00000000-0000-0000-0000-000000000000"
             input:
-                policy_id: "00000000-0000-0000-0000-000000000000"
+                policy: "Violence"
                 # You may provide a list of labels if you want to require that one
                 # or more specific labels from the policy matched. If no labels
                 # are provided, any label match will be considered a hit.
@@ -17,8 +22,10 @@ rails:
                     - "Violence"
                     - "Weapons"
                     - "Drugs"
+
+                label_match_logic: ALL
             output:
-                policy_id: "00000000-0000-0000-0000-000000000000"
+                policy: Weapons
 
     input:
         flows:
