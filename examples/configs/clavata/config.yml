@@ -1,36 +1,25 @@
 models:
-    - type: main
-      engine: openai
-      model: gpt-4
+  - type: main
+    engine: openai
+    model: gpt-3.5-turbo-instruct
 
 rails:
-    config:
-        clavata:
-            # Only provide this if you've been told to by Clavata.ai
-            server_endpoint: "https://some-alt-endpoint.com"
-            policies:
-                - alias: "Violence"
-                  id: "00000000-0000-0000-0000-000000000000"
-                - alias: "Weapons"
-                  id: "00000000-0000-0000-0000-000000000000"
-            input:
-                policy: "Violence"
-                # You may provide a list of labels if you want to require that one
-                # or more specific labels from the policy matched. If no labels
-                # are provided, any label match will be considered a hit.
-                labels:
-                    - "Violence"
-                    - "Weapons"
-                    - "Drugs"
+  config:
+    clavata:
+      policies:
+        - alias: "Violence"
+          id: "00000000-0000-0000-0000-000000000000"
+        - alias: "Weapons"
+          id: "00000000-0000-0000-0000-000000000000"
+      input:
+        policy: "Violence"
+      output:
+        policy: "Weapons"
 
-                label_match_logic: ALL
-            output:
-                policy: Weapons
+  input:
+    flows:
+      - clavata check input
 
-    input:
-        flows:
-            - clavata check input
-
-    output:
-        flows:
-            - clavata check output
+  output:
+    flows:
+      - clavata check output

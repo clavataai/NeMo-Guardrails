@@ -1,6 +1,12 @@
-# Clavata Integration Example
+# Clavata Example
 
 This example demonstrates how to integrate with the [Clavata](https://clavata.ai) API for content moderation.
+
+To test this configuration you can use the CLI Chat by running the following command from the `examples/configs/clavata` directory:
+
+```bash
+nemoguardrails chat
+```
 
 The structure of the config folder is the following:
 

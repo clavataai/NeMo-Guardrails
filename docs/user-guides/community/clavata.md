@@ -2,7 +2,12 @@
 
 [Clavata](https://clavata.ai) provides content moderation capabilities to detect and filter inappropriate content. This integration enables NeMo Guardrails to use Clavata for content moderation in input and output flows.
 
-To request access to Clavata please visit: https://www.clavata.ai/requestaccess or email hello@clavata.ai
+## Getting Access
+
+To sign up for Clavata or obtain an API key:
+
+- [Request access](https://www.clavata.ai/requestaccess) through the website
+- Contact support at <hello@clavata.ai>
 
 ## Setup
 
@@ -11,31 +16,37 @@ To request access to Clavata please visit: https://www.clavata.ai/requestaccess 
    - Policy IDs for the content types you want to moderate
    - (Optional) A custom server endpoint if provided by Clavata.ai
 
-2. Set the `CLAVATA_API_KEY` environment variable with your Clavata API key.
+2. Set the `CLAVATA_API_KEY` environment variable with your Clavata API key:
 
-3. Update your `config.yml` file to include the Clavata settings:
+   ```bash
+   export CLAVATA_API_KEY="your-api-key"
+   ```
+
+3. Configure your `config.yml` according to the following example:
 
 ```yaml
 rails:
   config:
     clavata:
-      # Only provide this if you've been told to by Clavata.ai
-      server_endpoint: "https://some-alt-endpoint.com"
       policies:
         - alias: "Violence"
           id: "00000000-0000-0000-0000-000000000000"
         - alias: "Weapons"
           id: "00000000-0000-0000-0000-000000000000"
       input:
+        # Reference an alias above in `policies`
         policy: "Violence"
         # Optional: Specify labels to require specific matches
         labels:
           - "Violence"
           - "Weapons"
           - "Drugs"
-        label_match_logic: ALL  # Can be "ALL" or "ANY"
+        label_match_logic: ALL  # "ALL" | "ANY"
       output:
         policy: "Weapons"
+      # Optional: Only provide this if you've been told to by Clavata.ai
+      server_endpoint: "https://some-alt-endpoint.com"
+  # Optional: reference the built-in flows
   input:
     flows:
       - clavata check input
@@ -55,12 +66,35 @@ rails:
 
 ## Usage
 
-Once configured, the Clavata integration can automatically:
+The Clavata integration provides two ways to implement content moderation:
 
-1. Check user inputs against specified content moderation policies before they are processed by the LLM
-2. Check LLM outputs against specified content moderation policies before they are sent back to the user
+### 1. Built-in Flows
 
-The `detect_policy_match` action in `nemoguardrails/library/clavata/actions.py` handles the content moderation checks.
+Add these flows to your configuration to automatically check content:
+
+```yaml
+rails:
+  input:
+    flows:
+      - clavata check input  # Check user input
+  output:
+    flows:
+      - clavata check output  # Check LLM output
+```
+
+### 2. Programmatic Usage
+
+Use the `DetectPolicyMatchAction` in your Colang flows to check content:
+
+```colang
+# Check input content
+$is_match = await DetectPolicyMatchAction(rail="input", text=$user_message)
+
+# Check output content
+$is_match = await DetectPolicyMatchAction(rail="output", text=$bot_message)
+```
+
+The action returns `True` if the content matches the specified policy's criteria.
 
 ## Customization
 
