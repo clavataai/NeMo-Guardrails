@@ -7,19 +7,18 @@ rails:
   config:
     clavata:
       policies:
-        - alias: "Violence"
-          id: "00000000-0000-0000-0000-000000000000"
-        - alias: "Weapons"
-          id: "00000000-0000-0000-0000-000000000000"
+        - alias: Violence
+          id: 00000000-0000-0000-0000-000000000000
+        - alias: Weapons
+          id: 00000000-0000-0000-0000-000000000000
       input:
-        policy: "Violence"
+        policy: Violence
       output:
-        policy: "Weapons"
+        policy: Weapons
 
   input:
     flows:
       - clavata check input
-
   output:
     flows:
       - clavata check output

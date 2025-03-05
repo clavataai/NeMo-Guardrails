@@ -29,21 +29,21 @@ rails:
   config:
     clavata:
       policies:
-        - alias: "Violence"
-          id: "00000000-0000-0000-0000-000000000000"
-        - alias: "Weapons"
-          id: "00000000-0000-0000-0000-000000000000"
+        - alias: Violence
+          id: 00000000-0000-0000-0000-000000000000
+        - alias: Weapons
+          id: 00000000-0000-0000-0000-000000000000
       input:
         # Reference an alias above in `policies`
-        policy: "Violence"
+        policy: Violence
         # Optional: Specify labels to require specific matches
         labels:
-          - "Violence"
-          - "Weapons"
-          - "Drugs"
+          - Violence
+          - Weapons
+          - Drugs
         label_match_logic: ALL  # "ALL" | "ANY"
       output:
-        policy: "Weapons"
+        policy: Weapons
       # Optional: Only provide this if you've been told to by Clavata.ai
       server_endpoint: "https://some-alt-endpoint.com"
   # Optional: reference the built-in flows
