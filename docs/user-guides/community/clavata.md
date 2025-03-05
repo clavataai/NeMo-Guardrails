@@ -2,6 +2,8 @@
 
 [Clavata](https://clavata.ai) provides content moderation capabilities to detect and filter inappropriate content. This integration enables NeMo Guardrails to use Clavata for content moderation in input and output flows.
 
+To request access to Clavata please visit: https://www.clavata.ai/requestaccess or email hello@clavata.ai
+
 ## Setup
 
 1. Ensure you have access to the Clavata platform and have configured your content moderation policies. You'll need:
