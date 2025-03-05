@@ -16,6 +16,7 @@
 """Check for matches against a Clavata policy."""
 
 import logging
+import os
 import re
 import textwrap
 from typing import TYPE_CHECKING, List, Literal, Optional, Tuple, cast
@@ -130,14 +131,26 @@ def _get_policy_id(
         raise ClavataPluginValueError(f"Policy with alias '{alias}' not found.") from e
 
 
+def _get_api_key() -> str:
+    """Get the Clavata API key from the environment variable."""
+    api_key = os.environ.get("CLAVATA_API_KEY")
+    if not api_key:
+        raise ClavataPluginValueError(
+            "CLAVATA_API_KEY environment variable is not set. "
+            "An API_KEY is required to make a request to the Clavata API."
+        )
+    return api_key
+
+
 async def _get_policy_result(
     text: str,
     policy_id: str,
     clavata_config: ClavataRailConfig,
 ) -> PolicyResult:
     """Get the policy result for the given source."""
-    endpoint = f"{clavata_config.server_endpoint}/v1/jobs"
-    job = await clavata_create_job(text, policy_id, endpoint)
+    base_endpoint = str(clavata_config.server_endpoint).rstrip("/")
+    endpoint = f"{base_endpoint}/v1/jobs"
+    job = await clavata_create_job(text, policy_id, endpoint, _get_api_key())
 
     reports = [res.report for res in job.results]
 
