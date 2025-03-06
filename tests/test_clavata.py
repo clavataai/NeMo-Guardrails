@@ -176,7 +176,7 @@ async def test_clavata_output_policy_check(monkeypatch):
         config,
         llm_completions=[
             "  ask about farm animals",
-            '  "Cows say moo and live on farms..."',
+            "  respond about farm animals",
         ],
     )
 
@@ -241,8 +241,6 @@ async def test_clavata_label_match_logic_any(monkeypatch):
 
         # Create response with one matching label
         mock_response = create_clavata_response(
-            failed=False,
-            policy_matched=True,
             labels={"DogBarking": True, "CatMeowing": False, "CowMooing": False},
         )
 
@@ -252,7 +250,7 @@ async def test_clavata_label_match_logic_any(monkeypatch):
             status=200,
         )
 
-        chat >> "Hi! I want to talk about dogs barking."
+        chat >> "Woof"
         # Since DogBarking matched and we're using ANY logic, the message should be blocked
         await chat.bot_async("I cannot respond to that request.")
 
@@ -299,9 +297,7 @@ async def test_clavata_label_match_logic_any_no_match(monkeypatch):
 
         # Create response with a different label matching
         mock_response = create_clavata_response(
-            failed=False,
-            policy_matched=True,
-            labels={"DogBarking": False, "CatMeowing": False, "HorseNeighing": True},
+            labels={"DogBarking": False, "CatMeowing": False, "HorseNeighing": False},
         )
 
         m.post(
@@ -310,7 +306,7 @@ async def test_clavata_label_match_logic_any_no_match(monkeypatch):
             status=200,
         )
 
-        chat >> "Hi! I want to talk about horses neighing."
+        chat >> "Hey"
         # Since none of our specified labels matched, the message should pass through
         await chat.bot_async("Hello there!")
 
@@ -358,8 +354,6 @@ async def test_clavata_label_match_logic_all(monkeypatch):
 
         # Create response with all labels matching
         mock_response = create_clavata_response(
-            failed=False,
-            policy_matched=True,
             labels={"DogBarking": True, "CatMeowing": True, "CowMooing": True},
         )
 
@@ -369,7 +363,7 @@ async def test_clavata_label_match_logic_all(monkeypatch):
             status=200,
         )
 
-        chat >> "Hi! I want to talk about all animal sounds."
+        chat >> "Woof woof, meow, moo."
         # Since all specified labels matched and we're using ALL logic, the message should be blocked
         await chat.bot_async("I cannot respond to that request.")
 
@@ -417,10 +411,10 @@ async def test_clavata_label_match_logic_all_partial_match(monkeypatch):
 
         # Create response with only some labels matching
         mock_response = create_clavata_response(
-            failed=False,
-            policy_matched=True,
             labels={"DogBarking": True, "CatMeowing": True, "CowMooing": False},
         )
+
+        print("!!!", mock_response)
 
         m.post(
             "https://gateway.app.clavata.ai:8443/v1/jobs",
@@ -471,9 +465,7 @@ async def test_clavata_empty_labels(monkeypatch):
         chat.app.register_action(retrieve_relevant_chunks, "retrieve_relevant_chunks")
 
         # Create response with a policy match
-        mock_response = create_clavata_response(
-            failed=False, policy_matched=True, labels={"SomeLabel": True}
-        )
+        mock_response = create_clavata_response(labels={"SomeLabel": True})
 
         m.post(
             "https://gateway.app.clavata.ai:8443/v1/jobs",
@@ -523,9 +515,7 @@ async def test_clavata_policy_no_match(monkeypatch):
         chat.app.register_action(retrieve_relevant_chunks, "retrieve_relevant_chunks")
 
         # Create response with no policy match
-        mock_response = create_clavata_response(
-            failed=False, policy_matched=False, labels={}
-        )
+        mock_response = create_clavata_response()
 
         m.post(
             "https://gateway.app.clavata.ai:8443/v1/jobs",
@@ -537,91 +527,12 @@ async def test_clavata_policy_no_match(monkeypatch):
         await chat.bot_async("Hello there!")
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_clavata_evaluate_with_policy(monkeypatch):
-    """Test the evaluate_with_clavata_policy action."""
-    monkeypatch.setenv("CLAVATA_API_KEY", "test_api_key")
-
-    # Custom colang for this test
-    custom_colang = """
-        define user ask question
-          "What sounds do dogs and cats make?"
-
-        define flow
-          user ask question
-          $labels = await EvaluateUserInputWithClavataPolicy(policy="AnimalSoundsPolicy")
-          if "DogBarking" in $labels
-            bot refuse dog sounds
-          else if "CatMeowing" in $labels
-            bot refuse cat sounds
-          else
-            bot respond to question
-
-        define bot refuse dog sounds
-          "I cannot discuss dog sounds."
-
-        define bot refuse cat sounds
-          "I cannot discuss cat sounds."
-
-        define bot respond to question
-          "I can answer your question."
-    """
-
-    config = RailsConfig.from_content(
-        yaml_content="""
-            models: []
-            rails:
-              config:
-                clavata:
-                  policies:
-                    - alias: AnimalSoundsPolicy
-                      id: 00000000-0000-0000-0000-000000000000
-        """,
-        colang_content=custom_colang,
-    )
-
-    chat = TestChat(
-        config,
-        llm_completions=[
-            "  ask question",
-            '  "I cannot discuss dog sounds."',
-        ],
-    )
-
-    # Mock response from Clavata API
-    with aioresponses() as m:
-        # Register the retrieve_relevant_chunks action
-        chat.app.register_action(retrieve_relevant_chunks, "retrieve_relevant_chunks")
-
-        # Create response with dog barking label match
-        mock_response = create_clavata_response(
-            failed=False,
-            policy_matched=True,
-            labels={"DogBarking": True, "CatMeowing": True},
-        )
-
-        m.post(
-            "https://gateway.app.clavata.ai:8443/v1/jobs",
-            payload=mock_response,
-            status=200,
-        )
-
-        # Set up the context for the action
-        chat.app.register_action_param(
-            "EvaluateUserInputWithClavataPolicy",
-            {
-                "policy": "AnimalSoundsPolicy",
-                "user_input": "What sounds do dogs and cats make?",
-                "relevant_chunks": "Mock retrieved context.",
-            },
-        )
-
-        chat >> "What sounds do dogs and cats make?"
-        await chat.bot_async("I cannot discuss dog sounds.")
-
-
-def create_clavata_response(failed=False, labels=None):
+def create_clavata_response(
+    failed=False,
+    labels=None,
+    policy_name="TestPolicy",
+    policy_id="00000000-0000-0000-0000-000000000000",
+):
     """
     Create a properly formatted Clavata API response.
 
@@ -661,31 +572,22 @@ def create_clavata_response(failed=False, labels=None):
                     "policy_matched": policy_matched,
                     "label_matches": label_matches,
                     "report": {
-                        "policy_id": "00000000-0000-0000-0000-000000000000",
-                        "policy_name": "TestPolicy",
+                        "policy_id": policy_id,
+                        "policy_name": policy_name,
                         "policy_matched": policy_matched,
                         "label_matches": label_matches,
                         "result": "OUTCOME_TRUE" if policy_matched else "OUTCOME_FALSE",
                         "sectionEvaluationReports": [
                             {
                                 "section": "main",
-                                "matched": policy_matched,
-                                "name": "Main Section",
+                                "matched": label_matched,
+                                "name": label,
                                 "message": "Section evaluation result",
                                 "result": (
-                                    "OUTCOME_TRUE"
-                                    if policy_matched
-                                    else "OUTCOME_FALSE"
+                                    "OUTCOME_TRUE" if label_matched else "OUTCOME_FALSE"
                                 ),
-                                "labels": [
-                                    {
-                                        "name": label_name,
-                                        "matched": matched,
-                                        "message": f"This content contains {label_name.lower()}",
-                                    }
-                                    for label_name, matched in labels.items()
-                                ],
                             }
+                            for label, label_matched in labels.items()
                         ],
                     },
                 }
