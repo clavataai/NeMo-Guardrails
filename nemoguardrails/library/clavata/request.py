@@ -19,13 +19,16 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Type, TypeVar
 
 import aiohttp
 from pydantic import BaseModel, Field, ValidationError
 
+from nemoguardrails.library.clavata.utils import exponential_backoff
+
 from .errs import (
     ClavataPluginAPIError,
+    ClavataPluginAPIRateLimitError,
     ClavataPluginConfigurationError,
     ClavataPluginValueError,
 )
@@ -116,9 +119,9 @@ class Job(BaseModel):
 
     status: JobStatus = Field(description="The status of the job")
     results: List[Result] = Field(description="The results of the job")
-    created: datetime = Field(description="The timestamp when the job was created")
-    updated: datetime = Field(description="The timestamp when the job was updated")
-    completed: datetime = Field(description="The timestamp when the job was completed")
+    # created: datetime = Field(description="The timestamp when the job was created")
+    # updated: datetime = Field(description="The timestamp when the job was updated")
+    # completed: datetime = Field(description="The timestamp when the job was completed")
 
 
 class CreateJobResponse(BaseModel):
@@ -127,62 +130,95 @@ class CreateJobResponse(BaseModel):
     job: Job = Field(description="The job that was created")
 
 
-async def clavata_create_job(
-    text: str, policy_id: str, server_endpoint: str, api_key: Optional[str] = None
-) -> Job:
-    """Send a request to the Clavata API.
+ResponseModelT = TypeVar("ResponseModelT", bound=BaseModel)
 
-    Args:
-        text: The text to send to the Clavata API.
-        policy_id: The policy ID to use for the request.
-        server_endpoint: The server endpoint to use for the request.
-        api_key: The Clavata API key to use for the request.
 
-    Returns:
-        The response from the Clavata API. See Clavata API reference for more details:
-        https://api.docs.clavata.net/#tag/Create-Jobs/operation/GatewayService_CreateJob
+class ClavataClient:
+    """A client for the Clavata API."""
 
-    Raises:
-        ValueError: If api_key is missing for cloud API, if the API call fails,
-            or if the response cannot be parsed as JSON.
-    """
+    base_endpoint: str
+    api_key: Optional[str]
 
-    payload = JobRequest(
-        content_data=[ContentData(text=text)],
-        policy_id=policy_id,
-        wait_for_completion=True,
-    )
+    def __init__(self, base_endpoint: str, api_key: Optional[str] = None):
+        self.base_endpoint = base_endpoint
 
-    headers = AuthHeader(api_key=api_key).to_headers()
+        # API key can be passed or set in the environment variable CLAVATA_API_KEY
+        self.api_key = api_key or os.environ.get("CLAVATA_API_KEY")
+        if self.api_key is None:
+            raise ClavataPluginConfigurationError(
+                "CLAVATA_API_KEY environment variable is not set. "
+                "An API_KEY is required to make a request to the Clavata API."
+            )
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                server_endpoint, json=payload.model_dump(), headers=headers
-            ) as resp:
-                if resp.status != 200:
-                    raise ClavataPluginAPIError(
-                        f"Clavata call failed with status code {resp.status}.\n"
-                        f"Details: {await resp.text()}"
-                    )
+    def _get_full_endpoint(self, endpoint: str) -> str:
+        return f"{self.base_endpoint}{endpoint}"
 
-                try:
-                    parsed_response = await resp.json()
-                except aiohttp.ContentTypeError as e:
-                    raise ClavataPluginValueError(
-                        f"Failed to parse Clavata response as JSON. Status: {resp.status}, "
-                        f"Content: {await resp.text()}"
-                    ) from e
+    def _get_headers(self) -> Dict[str, str]:
+        return AuthHeader(api_key=self.api_key).to_headers()
 
-                # Now we actually parse the JSON into a meaningful object
-                try:
-                    return CreateJobResponse.model_validate(parsed_response).job
-                except ValidationError as e:
-                    raise ClavataPluginValueError(
-                        f"Invalid response format from Clavata API. Details: {e}"
-                    ) from e
+    @exponential_backoff(retry_exceptions=(ClavataPluginAPIRateLimitError,))
+    async def _make_request(
+        self,
+        endpoint: str,
+        payload: BaseModel,
+        response_model: Type[ResponseModelT],
+    ) -> ResponseModelT:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self._get_full_endpoint(endpoint),
+                    json=payload.model_dump(),
+                    headers=self._get_headers(),
+                ) as resp:
+                    if resp.status == 429:
+                        # Trigger exponential backoff on rate limit errors
+                        raise ClavataPluginAPIRateLimitError(
+                            f"Clavata API rate limit exceeded. Status code: {resp.status}"
+                        )
 
-    except Exception as e:
-        raise ClavataPluginAPIError(
-            f"Failed to make Clavata API request. Error: {e}"
-        ) from e
+                    if resp.status != 200:
+                        raise ClavataPluginAPIError(
+                            f"Clavata call failed with status code {resp.status}.\n"
+                            f"Details: {await resp.text()}"
+                        )
+
+                    try:
+                        parsed_response = await resp.json()
+                    except aiohttp.ContentTypeError as e:
+                        raise ClavataPluginValueError(
+                            f"Failed to parse Clavata response as JSON. Status: {resp.status}, "
+                            f"Content: {await resp.text()}"
+                        ) from e
+
+                    # Now we actually parse the JSON into a meaningful object
+                    try:
+                        return response_model.model_validate(parsed_response)
+                    except ValidationError as e:
+                        raise ClavataPluginValueError(
+                            f"Invalid response format from Clavata API. Details: {e}"
+                        ) from e
+
+        except Exception as e:
+            raise ClavataPluginAPIError(
+                f"Failed to make Clavata API request. Error: {e}"
+            ) from e
+
+    async def create_job(self, text: str, policy_id: str) -> Job:
+        """
+        Create a job in Clavata.
+
+        Args:
+            text: The text to send to the Clavata API.
+            policy_id: The policy ID to use for the request.
+
+        Returns:
+            Job: The job that was created.
+        """
+        payload = JobRequest(
+            content_data=[ContentData(text=text)],
+            policy_id=policy_id,
+            wait_for_completion=True,
+        )
+
+        rv = await self._make_request("/v1/jobs", payload, CreateJobResponse)
+        return rv.job

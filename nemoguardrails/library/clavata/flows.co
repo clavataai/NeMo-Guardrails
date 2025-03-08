@@ -1,17 +1,27 @@
+## Clavata Policy and Label Check Guardrail Flows
+
 @active
-flow clavata check input
+flow clavata check input for $policy $labels=""
   """Check if the user input is benign."""
-  $is_match = await DetectPolicyMatchAction(rail="input", text=$user_message)
+  $is_match = await ClavataCheckV2Action(policy=$policy, text=$user_message, labels=$labels)
 
   if $is_match
-    bot refuse to respond
+    if $system.config.enable_rails_exceptions
+      $msg = "Input not allowed. The input was blocked by the clavata check input with $policy={$policy} flow"
+      send ClavataCheckInputException(message=$msg)
+    else
+      bot refuse to respond
     abort
 
 @active
-flow clavata check output
+flow clavata check output for $policy $labels=""
   """Check if the bot output is benign."""
-  $is_match = await DetectPolicyMatchAction(rail="output", text=$bot_message)
+  $is_match = await ClavataCheckV2Action(policy=$policy, text=$bot_message, labels=$labels)
 
   if $is_match
-    bot refuse to respond
+    if $system.config.enable_rails_exceptions
+      $msg = "Output not allowed. The output was blocked by the clavata check output with $policy={$policy} flow"
+      send ClavataCheckOutputException(message=$msg)
+    else
+      bot refuse to respond
     abort

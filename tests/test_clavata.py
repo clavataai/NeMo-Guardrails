@@ -13,11 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import datetime
+from typing import Any, Dict, Optional
+
 import pytest
 from aioresponses import aioresponses
 
 from nemoguardrails import RailsConfig
 from nemoguardrails.actions.actions import ActionResult, action
+from nemoguardrails.library.clavata.request import (
+    CreateJobResponse,
+    Job,
+    Report,
+    Result,
+    SectionReport,
+)
 from tests.utils import TestChat
 
 
@@ -252,13 +262,13 @@ async def test_clavata_label_match_logic_all(monkeypatch):
                   policies:
                     - alias: AnimalSoundsPolicy
                       id: 00000000-0000-0000-0000-000000000000
+                  label_match_logic: ALL
                   input:
                     policy: AnimalSoundsPolicy
                     labels:
                       - DogBarking
                       - CatMeowing
                       - CowMooing
-                    label_match_logic: ALL
               input:
                 flows:
                   - clavata check input
@@ -278,7 +288,12 @@ async def test_clavata_label_match_logic_all(monkeypatch):
         chat.app.register_action(retrieve_relevant_chunks, "retrieve_relevant_chunks")
 
         mock_response = create_clavata_response(
-            labels={"DogBarking": True, "CatMeowing": True, "CowMooing": True},
+            labels={
+                "DogBarking": True,
+                "CatMeowing": True,
+                "CowMooing": True,
+                "HorseNeighing": False,
+            },
         )
 
         m.post(
@@ -307,13 +322,13 @@ async def test_clavata_label_match_logic_all_partial_match(monkeypatch):
                   policies:
                     - alias: AnimalSoundsPolicy
                       id: 00000000-0000-0000-0000-000000000000
+                  label_match_logic: ALL
                   input:
                     policy: AnimalSoundsPolicy
                     labels:
                       - DogBarking
                       - CatMeowing
                       - CowMooing
-                    label_match_logic: ALL
               input:
                 flows:
                   - clavata check input
@@ -449,10 +464,8 @@ async def test_clavata_policy_no_match(monkeypatch):
 
 def create_clavata_response(
     failed=False,
-    labels=None,
-    policy_name="TestPolicy",
-    policy_id="00000000-0000-0000-0000-000000000000",
-):
+    labels: Optional[Dict[str, bool]] = None,
+) -> Dict[str, Any]:
     """
     Factory function to create a properly formatted Clavata API response.
 
@@ -469,53 +482,29 @@ def create_clavata_response(
     if labels is None:
         labels = {}
 
-    policy_matched = any(matched for matched in labels.values())
-
-    label_matches = [
-        {
-            "label": label_name,
-            "message": f"This content contains {label_name.lower()}",
-            "matched": matched,
-        }
-        for label_name, matched in labels.items()
-    ]
-
-    # Mock response from Clavata API
-    response = {
-        "job": {
-            "failed": failed,
-            "policy_matched": policy_matched,
-            "label_matches": label_matches,
-            "status": "JOB_STATUS_COMPLETED",
-            "results": [
-                {
-                    "policy_matched": policy_matched,
-                    "label_matches": label_matches,
-                    "report": {
-                        "policy_id": policy_id,
-                        "policy_name": policy_name,
-                        "policy_matched": policy_matched,
-                        "label_matches": label_matches,
-                        "result": "OUTCOME_TRUE" if policy_matched else "OUTCOME_FALSE",
-                        "sectionEvaluationReports": [
-                            {
-                                "section": "main",
-                                "matched": label_matched,
-                                "name": label,
-                                "message": "Section evaluation result",
-                                "result": (
-                                    "OUTCOME_TRUE" if label_matched else "OUTCOME_FALSE"
-                                ),
-                            }
-                            for label, label_matched in labels.items()
+    response = CreateJobResponse(
+        job=Job(
+            status="JOB_STATUS_FAILED" if failed else "JOB_STATUS_COMPLETED",
+            results=[
+                Result(
+                    report=Report(
+                        result=(
+                            "OUTCOME_FAILED"
+                            if failed
+                            else ("OUTCOME_TRUE" if labels else "OUTCOME_FALSE")
+                        ),
+                        sectionEvaluationReports=[
+                            SectionReport(
+                                name=lbl,
+                                result=("OUTCOME_TRUE" if matched else "OUTCOME_FALSE"),
+                                message="",
+                            )
+                            for lbl, matched in labels.items()
                         ],
-                    },
-                }
+                    )
+                )
             ],
-            "created": "2023-01-01T00:00:00Z",
-            "updated": "2023-01-01T00:00:01Z",
-            "completed": "2023-01-01T00:00:02Z",
-        }
-    }
+        )
+    )
 
-    return response
+    return response.model_dump()

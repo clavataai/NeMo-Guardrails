@@ -4,12 +4,6 @@ class ClavataPluginError(Exception):
     """
 
 
-class ClavataPluginAPIError(ClavataPluginError):
-    """
-    Exception raised when the Clavata plugin API returns an error.
-    """
-
-
 class ClavataPluginConfigurationError(ClavataPluginError):
     """
     Exception raised when the Clavata plugin is not configured correctly.
@@ -19,4 +13,22 @@ class ClavataPluginConfigurationError(ClavataPluginError):
 class ClavataPluginValueError(ClavataPluginError):
     """
     Exception raised when the Clavata plugin is used incorrectly.
+    """
+
+
+class ClavataPluginTypeError(ClavataPluginError):
+    """
+    Exception raised when the Clavata plugin is used incorrectly due to type mismatches.
+    """
+
+
+class ClavataPluginAPIError(ClavataPluginError):
+    """
+    Exception raised when the Clavata plugin API returns an error.
+    """
+
+
+class ClavataPluginAPIRateLimitError(ClavataPluginAPIError):
+    """
+    Exception raised when the Clavata plugin API rate limit is exceeded.
     """

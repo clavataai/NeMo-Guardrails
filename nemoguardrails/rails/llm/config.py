@@ -567,13 +567,6 @@ class ClavataRailOptions(BaseModel):
         If labels are provided, only hits on the provided labels will be considered a hit.""",
     )
 
-    label_match_logic: Literal["ANY", "ALL"] = Field(
-        default="ANY",
-        description="""The logic to use when deciding whether the evaluation matched.
-        If ANY, only one of the configured labels needs to be found in the input or output.
-        If ALL, all configured labels must be found in the input or output.""",
-    )
-
 
 class ClavataPolicyAlias(BaseModel):
     """Configuration data for a Clavata policy alias"""
@@ -612,6 +605,13 @@ class ClavataRailConfig(BaseModel):
     policies: List[ClavataPolicyAlias] = Field(
         default_factory=list,
         description="A list of policy aliases and their corresponding IDs.",
+    )
+
+    label_match_logic: Literal["ANY", "ALL"] = Field(
+        default="ANY",
+        description="""The logic to use when deciding whether the evaluation matched.
+        If ANY, only one of the configured labels needs to be found in the input or output.
+        If ALL, all configured labels must be found in the input or output.""",
     )
 
     input: Optional[ClavataRailOptions] = Field(
