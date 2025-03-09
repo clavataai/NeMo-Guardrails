@@ -233,7 +233,7 @@ async def clavata_check_v2(
 
     clavata_config = get_clavata_config(config)
     policy_id = get_policy_id(policy, clavata_config)
-    policy_result = await evaluate_with_policy(text, policy_id.hex, clavata_config)
+    policy_result = await evaluate_with_policy(text, str(policy_id), clavata_config)
 
     if labels and labels != "":
         return is_label_match(policy_result, labels, clavata_config)
@@ -301,7 +301,7 @@ async def detect_policy_match(
     """
     clavata_config = get_clavata_config(config)
     policy_id = get_policy_id(policy, clavata_config)
-    return await evaluate_with_policy(text, policy_id.hex, clavata_config)
+    return await evaluate_with_policy(text, str(policy_id), clavata_config)
 
 
 @action(execute_async=True)
@@ -332,7 +332,7 @@ async def evaluate_with_clavata_policy(
 
     # Evaluate the text against the Clavata policy
     policy_id = get_policy_id(policy, clavata_config)
-    policy_result = await evaluate_with_policy(text, policy_id.hex, clavata_config)
+    policy_result = await evaluate_with_policy(text, str(policy_id), clavata_config)
 
     # Return the list of labels that matched
     return [lbl.label for lbl in policy_result.label_matches if lbl.matched]
