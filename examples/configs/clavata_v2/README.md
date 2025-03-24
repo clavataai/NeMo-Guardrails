@@ -11,7 +11,7 @@ nemoguardrails chat
 The structure of the config folder is the following:
 
 - `config.yml` - The config file holding all the configuration options for Clavata integration.
-- `rails.co` - This file shows how to use Clavata's rails if you're using `colang v2.x`. In version `2.x` configuring rails via the `config.yml` file is deprecated and the new approach shown in `rails.co` is something you would include in your flows.
+- `rails.co` - This file shows how to use Clavata's rails if you're using `colang v2.x`. In version `2.x` configuration of rails via the `config.yml` file is deprecated and the new approach shown in `rails.co` is something you would include in your flows.
 
 Please see the docs for more details about:
 
@@ -21,13 +21,14 @@ Please see the docs for more details about:
 
 ## Policy Matching vs Label Matching
 
-If you take a peek at the example [config.yml](config.yml), you'll notice that the Clavata.ai integration with NeMo guardrails has 2 modes:
+If you take a peek at the example [config.yml](config.yml), you'll notice that the integration no longer specifies `input` or `output` keys. Instead, the input and output rails are specified in a `rails.co` file as shown [here](./rails.co).
 
-- Match against a policy
-- Match against specific labels in a policy
+Additionally, because the `$input_text` or `$output_text` is passed directly to the rail, both input and output rails use the same Clavata action flow `clavata check for`. Just pass the text to be evaluated, the policy to use, and, optionally, the specific labels to look for, and the flow will take care of the rest.
 
-Which mode to use will depend on both the policy being used, and what you're trying to accomplish. For most use cases, matching on the policy will likely be sufficient.
+Whether specific label matches are necessary will depend on both the policy being used, and what you're trying to accomplish. For most use cases, matching on the policy will likely be sufficient.
 
-You might want to specify labels, however, if you are using the same policy for input and output rails. Suppose, for example, that the policy includes many labels, and some are relevant to input, some are relevant to output, and some are relevant to both. You can specify the labels for input and output rails to ensure input only triggers when appropriate, and likewise for output.
+**As an example of when you might want to specify labels:**
+
+Suppose you are using the same policy for input and output rails. In this case, the policy might include many labels, with some relevant to input, some relevant to output, and some relevant to both. You can specify the labels for input and output rails to ensure each rail only triggers when appropriate.
 
 > Note: When setting specific labels to match, you can also control whether the logic is `ALL` (meaning all specified labels must be found), or `ANY`, meaning any of the specific labels being found will trigger the rail. The default is `ANY`, but you can control this by setting the `label_match_logic` key in your [rails config](./config.yml).

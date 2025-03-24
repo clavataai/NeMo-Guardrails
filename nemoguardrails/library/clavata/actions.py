@@ -16,9 +16,8 @@
 """Check for matches against a Clavata policy."""
 
 import logging
-import textwrap
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, List, Literal, Optional, cast
 
 from pydantic import BaseModel, Field
 
@@ -179,20 +178,42 @@ async def evaluate_with_policy(
     return rv
 
 
-@action()
-async def clavata_check_v1(
-    rail: ValidRailsType,
+@action(name="ClavataCheckAction")
+async def clavata_check(
     text: str,
-    context: Optional[dict] = None,
+    policy: str | None = None,
+    labels: Optional[List[str]] = None,
+    rail: ValidRailsType | None = None,
+    config: Optional[RailsConfig] = None,
+    **kwargs: Any,
+) -> bool:
+    """Check for matches against a Clavata policy."""
+    if not config:
+        raise ClavataPluginValueError("Rails config is required.")
+
+    if not text:
+        raise ClavataPluginValueError("Text to evaluate is required.")
+
+    # Which parameters will be received depends on whether the call is coming from colang 1.0 or 2.0
+    # If the call is coming from colang 1.0, then the parameters will be text, rail, config
+    # If the call is coming from colang 2.0, then the parameters will be text, policy, labels, config
+    if rail is not None:
+        # Colang 1.0
+        return await clavata_check_v1(text, rail, config)
+
+    # Colang 2.0
+    return await clavata_check_v2(text, policy, labels, config)
+
+
+async def clavata_check_v1(
+    text: str,
+    rail: ValidRailsType,
     config: Optional[RailsConfig] = None,
     **kwargs: Any,
 ) -> bool:
     """
-    Works with both v1 and v2 flows
+    Handles checking for v1 rails
     """
-    if context is None:
-        raise ClavataPluginValueError("Context is required.")
-
     if config is None:
         raise ClavataPluginValueError("Rails config is required.")
 
@@ -219,10 +240,9 @@ async def clavata_check_v1(
     return result.policy_matched
 
 
-@action(name="ClavataCheckV2Action", execute_async=True)
 async def clavata_check_v2(
     text: str,
-    policy: str,
+    policy: str | None,
     labels: Optional[List[str]] = None,
     config: Optional[RailsConfig] = None,
     **kwargs: Any,
@@ -230,6 +250,9 @@ async def clavata_check_v2(
     """Check for matches against a Clavata policy."""
     if not config:
         raise ClavataPluginValueError("Rails config is required.")
+
+    if policy is None:
+        raise ClavataPluginValueError("Policy is required.")
 
     clavata_config = get_clavata_config(config)
     policy_id = get_policy_id(policy, clavata_config)
@@ -302,37 +325,3 @@ async def detect_policy_match(
     clavata_config = get_clavata_config(config)
     policy_id = get_policy_id(policy, clavata_config)
     return await evaluate_with_policy(text, str(policy_id), clavata_config)
-
-
-@action(execute_async=True)
-async def evaluate_with_clavata_policy(
-    policy: str,
-    text: str,
-    config: Optional[RailsConfig] = None,
-    context: Optional[Dict[str, Any]] = None,
-    **kwargs: Any,
-) -> list[str]:
-    """Evaluate the provided text against the specified Clavata policy ID and return a list of labels that matched."""
-    if not config:
-        raise ClavataPluginValueError("Rails config is required.")
-
-    clavata_config = get_clavata_config(config)
-    relevant_chunks = context.get("relevant_chunks", "") if context is not None else ""
-
-    # Combine the user input and relevant chunks into a single string
-    text = textwrap.dedent(
-        f"""
-        Context:
-        {relevant_chunks}
-
-        User input:
-        {text}
-        """
-    )
-
-    # Evaluate the text against the Clavata policy
-    policy_id = get_policy_id(policy, clavata_config)
-    policy_result = await evaluate_with_policy(text, str(policy_id), clavata_config)
-
-    # Return the list of labels that matched
-    return [lbl.label for lbl in policy_result.label_matches if lbl.matched]

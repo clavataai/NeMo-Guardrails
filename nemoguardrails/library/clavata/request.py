@@ -18,7 +18,6 @@
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Dict, List, Literal, Optional, Type, TypeVar
 
 import aiohttp
@@ -119,9 +118,6 @@ class Job(BaseModel):
 
     status: JobStatus = Field(description="The status of the job")
     results: List[Result] = Field(description="The results of the job")
-    # created: datetime = Field(description="The timestamp when the job was created")
-    # updated: datetime = Field(description="The timestamp when the job was updated")
-    # completed: datetime = Field(description="The timestamp when the job was completed")
 
 
 class CreateJobResponse(BaseModel):
