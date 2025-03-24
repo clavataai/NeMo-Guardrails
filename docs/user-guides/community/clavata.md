@@ -69,9 +69,9 @@ The Clavata integration provides two ways to implement content moderation:
 
 ### 1. Built-in Flows
 
-#### For users of colang v1.0:
+#### For users of Colang 1.0
 
-Add these flows to your configuration to automatically check content when using _colang v1.0_:
+Add these flows to your configuration to automatically check content when using _Colang 1.0_:
 
 ```yaml
 rails:
@@ -83,9 +83,9 @@ rails:
       - clavata check output  # Check LLM output
 ```
 
-#### For users of colang v2.x:
+#### For users of Colang 2.0
 
-If you're using colang v2.x, there's no need to specify configuration for input and output rails in your `config.yml`. In fact, doing so is now deprecated. The good news is that because colang 2.x supports flows with variables, you can specify which policy to use (and even which labels to match) inline in the definitions for any of your rails (i.e., input, output, dialog, etc.)
+If you're using Colang 2.0, there's no need to specify configuration for input and output rails in your `config.yml`. In fact, doing so is now deprecated. The good news is that because Colang 2.0 supports flows with variables, you can specify which policy to use (and even which labels to match) inline in the definitions for any of your rails (i.e., input, output, dialog, etc.)
 
 Here's an example of how to configure an input rail to check against a specific Clavata policy:
 
@@ -107,7 +107,7 @@ flow input rails $input_text
 
 ### 2. Programmatic Usage
 
-Use the `clavata_check_v1` in your Colang flows to check content using the colang v1.0 action. You can also use the `clavata_check_v2` action in your own flows if you are using colang v2.x.
+Use the `clavata_check_v1` in your Colang flows to check content using the Colang 1.0 action. You can also use the `clavata_check_v2` action in your own flows if you are using Colang 2.0.
 
 ```colang
 # Check input content

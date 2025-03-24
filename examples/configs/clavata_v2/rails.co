@@ -5,18 +5,18 @@ import nemoguardrails.library.clavata
 # Policy only check
 # Check the input against the "Toxicity" policy
 flow input rails $input_text
-    clavata check input for $input_text Toxicity
+  clavata check input for $input_text Toxicity
 
 # Check the output against the "Threats" policy
 flow output rails $output_text
-    clavata check output for $output_text Threats
+  clavata check output for $output_text Threats
 
 
 # Matching against specific labels
 # Check the input against the "Toxicity" policy and the specific label "Hate"
 flow input rails $input_text
-    clavata check input for $input_text Toxicity "Hate"
+  clavata check input for $input_text Toxicity "Hate"
 
 # Check the output against the "Threats" policy and some specific labels
 flow output rails $output_text
-    clavata check output for $output_text Threats "Death Threat,Personal Threat"
+  clavata check output for $output_text Threats "Death Threat,Personal Threat"
