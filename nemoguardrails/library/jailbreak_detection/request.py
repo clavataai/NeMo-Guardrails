@@ -28,6 +28,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -92,3 +93,43 @@ async def jailbreak_detection_model_request(
                 log.exception("No jailbreak field in result.")
                 result = None
             return result
+
+
+async def jailbreak_nim_request(
+    prompt: str,
+    nim_url: str,
+    nim_port: int,
+):
+    payload = {
+        "input": prompt,
+    }
+
+    endpoint = f"http://{nim_url}:{nim_port}/v1/classify"
+    try:
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post(endpoint, json=payload, timeout=30) as resp:
+                    if resp.status != 200:
+                        log.error(
+                            f"NemoGuard JailbreakDetect NIM request failed with status {resp.status}"
+                        )
+                        return None
+
+                    result = await resp.json()
+
+                    log.info(f"Prompt jailbreak check: {result}.")
+                    try:
+                        result = result["jailbreak"]
+                    except KeyError:
+                        log.exception("No jailbreak field in result.")
+                        result = None
+                    return result
+            except aiohttp.ClientError as e:
+                log.error(f"NemoGuard JailbreakDetect NIM connection error: {str(e)}")
+                return None
+            except asyncio.TimeoutError:
+                log.error("NemoGuard JailbreakDetect NIM request timed out")
+                return None
+    except Exception as e:
+        log.error(f"Unexpected error during NIM request: {str(e)}")
+        return None

@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import logging
+import re
 from ast import literal_eval
 from typing import Any, Callable, List, Optional, Union
 
@@ -204,10 +205,46 @@ class LLMTaskManager:
         return messages
 
     def _get_messages_text_length(self, messages: List[dict]) -> int:
-        """Return the length of the text in the messages."""
+        """Return the length of the text in the messages for token counting purposes.
+
+        This method calculates text length for token limit checks, using placeholders for base64 images
+        instead of counting their full encoded size. This allows multimodal content with large base64
+        images to pass the length checks while still preserving the actual content.
+        """
+
+        def process_content_for_length(content):
+            """Process any content type (string, list, dict) and return its effective text."""
+            result_text = ""
+
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            result_text += item.get("text", "") + "\n"
+                        elif item.get("type") == "image_url" and isinstance(
+                            item.get("image_url"), dict
+                        ):
+                            # image_url items, only count a placeholder length
+                            result_text += "[IMAGE_CONTENT]\n"
+
+            # string content that might contain base64 data
+            elif isinstance(content, str):
+                base64_pattern = r"data:image/[^;]+;base64,[A-Za-z0-9+/=]+"
+                if re.search(base64_pattern, content):
+                    # Replace base64 content with placeholder using regex
+                    result_text += (
+                        re.sub(base64_pattern, "[IMAGE_CONTENT]", content) + "\n"
+                    )
+                else:
+                    result_text += content + "\n"
+
+            return result_text
+
         text = ""
         for message in messages:
-            text += message["content"] + "\n"
+            content = message.get("content", "")
+            text += process_content_for_length(content)
+
         return len(text)
 
     def render_task_prompt(
@@ -291,7 +328,7 @@ class LLMTaskManager:
         elif prompt.output_parser:
             output_parser = self.output_parsers.get(prompt.output_parser)
         if not output_parser:
-            logging.warning("No output parser found for %s", prompt.output_parser)
+            logging.info("No output parser found for %s", prompt.output_parser)
 
         model = get_task_model(self.config, task)
         if (

@@ -17,6 +17,7 @@
 
 import logging
 import os
+import re
 import warnings
 from enum import Enum
 from functools import cached_property
@@ -77,11 +78,11 @@ class ReasoningModelConfig(BaseModel):
         description="For reasoning models (e.g. OpenAI o1, DeepSeek-r1), if the output parser should remove thinking traces.",
     )
     start_token: Optional[str] = Field(
-        default=None,
+        default="<think>",
         description="The start token used for reasoning traces.",
     )
     end_token: Optional[str] = Field(
-        default=None,
+        default="</think>",
         description="The end token used for reasoning traces.",
     )
 
@@ -476,9 +477,18 @@ class JailbreakDetectionConfig(BaseModel):
     prefix_suffix_perplexity_threshold: float = Field(
         default=1845.65, description="The prefix/suffix perplexity threshold."
     )
-    embedding: str = Field(
+    nim_url: Optional[str] = Field(
+        default=None,
+        description="Location of the NemoGuard JailbreakDetect NIM.",
+    )
+    nim_port: int = Field(
+        default=8000,
+        description="Port the NemoGuard JailbreakDetect NIM is listening on.",
+    )
+    embedding: Optional[str] = Field(
         default="nvidia/nv-embedqa-e5-v5",
-        description="Model to use for embedding-based detections.",
+        description="DEPRECATED: Model to use for embedding-based detections. Use NIM instead.",
+        deprecated=True,
     )
 
 
@@ -1357,13 +1367,13 @@ class RailsConfig(BaseModel):
     def streaming_supported(self):
         """Whether the current config supports streaming or not."""
 
-        # if len(self.rails.output.flows) > 0:
-        #     # if we have output rails streaming enabled
-        #     # we keep it in case it was needed when we have
-        #     # support per rails
-        #     if self.rails.output.streaming.enabled:
-        #         return True
-        #     return False
+        if len(self.rails.output.flows) > 0:
+            # if we have output rails streaming enabled
+            # we keep it in case it was needed when we have
+            # support per rails
+            if self.rails.output.streaming.enabled:
+                return True
+            return False
 
         return True
 

@@ -2,7 +2,6 @@ rails:
   config:
     jailbreak_detection:
       server_endpoint: ""
-      embedding: "snowflake/snowflake-arctic-embed-m-long"
 
   input:
     flows:

@@ -17,6 +17,7 @@
 
 import asyncio
 import importlib.util
+import json
 import logging
 import os
 import re
@@ -68,7 +69,12 @@ from nemoguardrails.rails.llm.options import (
 )
 from nemoguardrails.rails.llm.utils import get_history_cache_key
 from nemoguardrails.streaming import StreamingHandler
-from nemoguardrails.utils import get_or_create_event_loop, new_event_dict, new_uuid
+from nemoguardrails.utils import (
+    extract_error_json,
+    get_or_create_event_loop,
+    new_event_dict,
+    new_uuid,
+)
 
 log = logging.getLogger(__name__)
 
@@ -684,11 +690,27 @@ class LLMRails:
                 assert isinstance(state, dict)
                 state_events = state["events"]
 
+            new_events = []
             # Compute the new events.
-            new_events = await self.runtime.generate_events(
-                state_events + events, processing_log=processing_log
-            )
-            output_state = None
+            try:
+                new_events = await self.runtime.generate_events(
+                    state_events + events, processing_log=processing_log
+                )
+                output_state = None
+
+            except Exception as e:
+                log.error("Error in generate_async: %s", e, exc_info=True)
+                streaming_handler = streaming_handler_var.get()
+                if streaming_handler:
+                    # Push an error chunk instead of None.
+                    error_message = str(e)
+                    error_dict = extract_error_json(error_message)
+                    error_payload = json.dumps(error_dict)
+                    await streaming_handler.push_chunk(error_payload)
+                    # push a termination signal
+                    await streaming_handler.push_chunk(None)
+                # Re-raise the exact exception
+                raise
         else:
             # In generation mode, by default the bot response is an instant action.
             instant_actions = ["UtteranceBotAction"]
@@ -758,7 +780,13 @@ class LLMRails:
 
         if exception:
             new_message = {"role": "exception", "content": exception}
+
         else:
+            # Ensure all items in responses are strings
+            responses = [
+                str(response) if not isinstance(response, str) else response
+                for response in responses
+            ]
             new_message = {"role": "assistant", "content": "\n".join(responses)}
         if response_tool_calls:
             new_message["tool_calls"] = response_tool_calls
@@ -943,11 +971,10 @@ class LLMRails:
                 state=state,
             )
         )
-        # TODO:
         # when we have output rails we wrap the streaming handler
-        if len(self.config.rails.output.flows) > 0:
-            #
-            # if self.config.rails.output.streaming.enabled:
+        # if len(self.config.rails.output.flows) > 0:
+        #
+        if self.config.rails.output.streaming.enabled:
             # returns an async generator
             return self._run_output_rails_in_streaming(
                 streaming_handler=streaming_handler,
@@ -1267,6 +1294,15 @@ class LLMRails:
         async for chunk_list, chunk_str_rep in buffer_strategy(streaming_handler):
             chunk_str = " ".join(chunk_list)
 
+            # Check if chunk_str_rep is a JSON string
+            # we yield a json error payload in generate_async when
+            # streaming has errors
+            try:
+                json.loads(chunk_str_rep)
+                yield chunk_str_rep
+                return
+            except json.JSONDecodeError:
+                pass
             if stream_first:
                 words = chunk_str_rep.split()
                 if words:
@@ -1298,10 +1334,26 @@ class LLMRails:
 
                 # Use the mapping to decide if the result indicates blocked content.
                 if is_output_blocked(result, action_func):
-                    # TODO: while whitespace issue is fixed, remove the space from below
                     reason = f"Blocked by {flow_id} rails."
-                    yield f'{{"event": "ABORT", "data": {{"reason": "{reason}"}}}}'
-                    # yield " {DATA: STOP}"
+
+                    # return the error as a plain JSON string (not in SSE format)
+                    # NOTE: When integrating with the OpenAI Python client, the server code should:
+                    # 1. detect this JSON error object in the stream
+                    # 2. terminate the stream
+                    # 3. format the error following OpenAI's SSE format
+                    # the OpenAI client will then properly raise an APIError with this error message
+
+                    error_data = {
+                        "error": {
+                            "message": reason,
+                            "type": "guardrails_violation",
+                            "param": flow_id,
+                            "code": "content_blocked",
+                        }
+                    }
+
+                    # return as plain JSON: the server should detect this JSON and convert it to an HTTP error
+                    yield json.dumps(error_data)
                     return
 
             if not stream_first:

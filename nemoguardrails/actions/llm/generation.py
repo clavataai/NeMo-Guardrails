@@ -21,8 +21,6 @@ import random
 import re
 import sys
 import threading
-import uuid
-from ast import literal_eval
 from functools import lru_cache
 from time import time
 from typing import Callable, List, Optional, cast
@@ -374,6 +372,12 @@ class LLMGenerationActions:
             # We search for the most relevant similar user utterance
             examples = ""
             potential_user_intents = []
+            if isinstance(event["text"], list):
+                text = " ".join(
+                    [item["text"] for item in event["text"] if item["type"] == "text"]
+                )
+            else:
+                text = event["text"]
 
             if self.user_message_index is not None:
                 threshold = None
@@ -384,7 +388,7 @@ class LLMGenerationActions:
                     )
 
                 results = await self.user_message_index.search(
-                    text=event["text"], max_results=5, threshold=threshold
+                    text=text, max_results=5, threshold=threshold
                 )
 
                 # If the option to use only the embeddings is activated, we take the first
@@ -409,7 +413,7 @@ class LLMGenerationActions:
                     )
                 else:
                     results = await self.user_message_index.search(
-                        text=event["text"], max_results=5
+                        text=text, max_results=5
                     )
                 # We add these in reverse order so the most relevant is towards the end.
                 for result in reversed(results):
@@ -522,6 +526,9 @@ class LLMGenerationActions:
                             prompt,
                             custom_callback_handlers=[streaming_handler_var.get()],
                         )
+                    text = self.llm_task_manager.parse_task_output(
+                        Task.GENERAL, output=text
+                    )
             else:
                 # Initialize the LLMCallInfo object
                 llm_call_info_var.set(LLMCallInfo(task=Task.GENERAL.value))
@@ -554,7 +561,10 @@ class LLMGenerationActions:
                         stop=["User:"],
                     )
 
-                text = result.strip()
+                text = self.llm_task_manager.parse_task_output(
+                    Task.GENERAL, output=result
+                )
+                text = text.strip()
                 if text.startswith('"'):
                     text = text[1:-1]
 
@@ -768,8 +778,8 @@ class LLMGenerationActions:
         # of course, it does not work when passed as context in `run_output_rails_in_streaming`
         # streaming_handler is set when stream_async method is used
 
-        if streaming_handler and len(self.config.rails.output.flows) > 0:
-            # if streaming_handler and self.config.rails.output.streaming.enabled:
+        # if streaming_handler and len(self.config.rails.output.flows) > 0:
+        if streaming_handler and self.config.rails.output.streaming.enabled:
             context_updates["skip_output_rails"] = True
 
         if bot_intent in self.config.bot_messages:
@@ -885,6 +895,10 @@ class LLMGenerationActions:
                             llm, prompt, custom_callback_handlers=[streaming_handler]
                         )
 
+                        result = self.llm_task_manager.parse_task_output(
+                            Task.GENERAL, output=result
+                        )
+
                     log.info(
                         "--- :: LLM Bot Message Generation passthrough call took %.2f seconds",
                         time() - t0,
@@ -903,9 +917,7 @@ class LLMGenerationActions:
 
                     # We add these in reverse order so the most relevant is towards the end.
                     for result in reversed(results):
-                        examples += (
-                            f"bot {result.text}\n  \"{result.meta['text']}\"\n\n"
-                        )
+                        examples += f'bot {result.text}\n  "{result.meta["text"]}"\n\n'
 
                 # We compute the relevant chunks to be used as context
                 relevant_chunks = get_retrieved_relevant_chunks(events)
@@ -1159,7 +1171,7 @@ class LLMGenerationActions:
                                     if bot_message_result.text == bot_canonical_form:
                                         found_bot_message = True
                                         example += (
-                                            f"  \"{bot_message_result.meta['text']}\"\n"
+                                            f'  "{bot_message_result.meta["text"]}"\n'
                                         )
                                         # Only use the first bot message for now
                                         break
@@ -1332,6 +1344,9 @@ class LLMGenerationActions:
             ):
                 result = await llm_call(llm, prompt)
 
+            result = self.llm_task_manager.parse_task_output(
+                Task.GENERAL, output=result
+            )
             text = result.strip()
             if text.startswith('"'):
                 text = text[1:-1]
