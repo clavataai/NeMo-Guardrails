@@ -3,7 +3,7 @@
 # INPUT RAIL
 define flow clavata check input
   """Check if the user input is benign."""
-  $is_match = execute ClavataCheckAction(rail="input", text=$user_message)
+  $is_match = execute ClavataCheckAction(text=$user_message, rail="input")
 
   if $is_match
     if $config.enable_rails_exceptions
@@ -17,7 +17,7 @@ define flow clavata check input
 # OUTPUT RAIL
 define flow clavata check output
   """Check if the bot output is benign."""
-  $is_match = execute ClavataCheckAction(rail="output", text=$bot_message)
+  $is_match = execute ClavataCheckAction(text=$bot_message, rail="output")
 
   if $is_match
     if $config.enable_rails_exceptions

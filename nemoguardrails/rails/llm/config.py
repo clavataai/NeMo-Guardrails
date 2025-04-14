@@ -17,26 +17,16 @@
 
 import logging
 import os
-import re
 import warnings
 from enum import Enum
-from functools import cached_property
 from typing import Any, Dict, List, Literal, Optional, Set, Tuple, Union
 
 import yaml
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    HttpUrl,
-    ValidationError,
-    field_validator,
-    root_validator,
-)
+from pydantic import BaseModel, ConfigDict, HttpUrl, ValidationError, root_validator
 from pydantic.fields import Field
 
 from nemoguardrails import utils
 from nemoguardrails.colang import parse_colang_file, parse_flow_elements
-from nemoguardrails.colang.v2_x.lang.colang_ast import Flow
 from nemoguardrails.colang.v2_x.lang.utils import format_colang_parsing_error_message
 from nemoguardrails.colang.v2_x.runtime.errors import ColangParsingError
 
@@ -578,32 +568,6 @@ class ClavataRailOptions(BaseModel):
     )
 
 
-class ClavataPolicyAlias(BaseModel):
-    """Configuration data for a Clavata policy alias"""
-
-    alias: str = Field(
-        description="The alias for the Clavata policy.",
-    )
-
-    id: str = Field(
-        description="The ID for the Clavata policy. Obtained from the Clavata Web dashboard.",
-    )
-
-    @field_validator("id")
-    @classmethod
-    def validate_policy_id(cls, v: Any):
-        """
-        Validates that a Policy ID is provided and that it is at least the correct length
-        to be a UUIDv4.
-        """
-        if not v or len(v) != 36:
-            raise ValueError(
-                "The Policy ID must be a valid UUIDv4. "
-                "Please check your Clavata configuration."
-            )
-        return v
-
-
 class ClavataRailConfig(BaseModel):
     """Configuration data for the Clavata API"""
 
@@ -612,9 +576,9 @@ class ClavataRailConfig(BaseModel):
         description="The endpoint for the Clavata API",
     )
 
-    policies: List[ClavataPolicyAlias] = Field(
-        default_factory=list,
-        description="A list of policy aliases and their corresponding IDs.",
+    policies: Dict[str, str] = Field(
+        default_factory=dict,
+        description="A dictionary of policy aliases and their corresponding IDs.",
     )
 
     label_match_logic: Literal["ANY", "ALL"] = Field(

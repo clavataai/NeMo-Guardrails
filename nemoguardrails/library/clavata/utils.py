@@ -7,23 +7,54 @@ from typing import Any, Optional, ParamSpec, TypeVar
 from .errs import ClavataPluginTypeError
 
 
-class RetriesExceededError(Exception):
+class AttemptsExceededError(Exception):
     """Exception raised when the maximum number of retries is exceeded."""
 
-    retries: int
-    max_retries: int
+    attempts: int
+    max_attempts: int
     last_exception: Optional[Exception]
 
     def __init__(
-        self, retries: int, max_retries: int, last_exception: Optional[Exception]
+        self, attempts: int, max_attempts: int, last_exception: Optional[Exception]
     ):
-        self.retries = retries
-        self.max_retries = max_retries
+        self.attempts = attempts
+        self.max_attempts = max_attempts
         self.last_exception = last_exception
         super().__init__(
-            f"Maximum number of retries ({max_retries}) exceeded after {retries} retries."
+            f"Maximum number of attempts ({max_attempts}) exceeded after {attempts} attempts."
             f"Last exception: {last_exception}"
         )
+
+
+def calculate_exp_delay(
+    retries: int,
+    initial_delay: float,
+    max_delay: float,
+    jitter: bool,
+) -> float:
+    """
+    Handles calculation of the delay for a specific attempt. Note that we specifically
+    ask for the number of retries, not the number of attempts, because the first attempt
+    is the initial call and we want the first delay to be raised to the power of 0.
+
+    Using "retries" instead of "attempts" makes it clearer what the input is, even
+    though a value called "attempts" is being passed in below.
+
+    Because this is an exponential backoff, the factor of increase is always 2.
+
+    Args:
+        retries: The number of retries made so far.
+        initial_delay: The initial delay.
+        max_delay: The maximum delay.
+        jitter: Whether to apply jitter to the delay. We use a full-jitter approach.
+    """
+    delay = min(
+        initial_delay * (2**retries),
+        max_delay,
+    )
+    if jitter:
+        delay = random.uniform(0, delay)
+    return delay
 
 
 ReturnT = TypeVar("ReturnT")
@@ -32,11 +63,10 @@ P = ParamSpec("P")
 
 def exponential_backoff(
     *,
-    max_retries: int = 3,
+    max_attempts: int = 3,
     initial_delay: float = 1.0,
     max_delay: float = 10.0,
-    factor: float = 2.0,
-    jitter: float = 0.2,  # 20% jitter, set to 0 to disable jitter
+    jitter: bool = True,  # Set to False to disable jitter
     retry_exceptions: type[Exception] | Iterable[type[Exception]] = Exception,
     on_permanent_failure: Optional[Callable[[int, Exception], Awaitable[Any]]] = None,
 ):
@@ -57,23 +87,14 @@ def exponential_backoff(
             "retry_exceptions must be a tuple of exception types"
         )
 
-    def calculate_exp_delay(retries: int) -> float:
-        delay = min(
-            initial_delay * (factor**retries),
-            max_delay,
-        )
-        if jitter:
-            delay += random.uniform(-delay * jitter, delay * jitter)
-        return delay
-
     def decorator(
         func: Callable[P, Awaitable[ReturnT]],
     ) -> Callable[P, Awaitable[ReturnT]]:
         @wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> ReturnT:
-            retries = 0
+            attempts = 0
             last_exception: Optional[Exception] = None
-            while retries < max_retries:
+            while attempts < max_attempts:
                 try:
                     return await func(*args, **kwargs)
                 except Exception as e:  # noqa: BLE001
@@ -83,22 +104,24 @@ def exponential_backoff(
                         if on_permanent_failure is None:
                             raise
 
-                        perm_rv = await on_permanent_failure(retries, e)
+                        perm_rv = await on_permanent_failure(attempts, e)
                         if isinstance(perm_rv, Exception):
                             raise perm_rv from e
                         return perm_rv
 
                     # We want to calculate the delay before incrementing because we want the first
                     # delay to be exactly the initial delay
-                    delay = calculate_exp_delay(retries)
+                    delay = calculate_exp_delay(
+                        attempts, initial_delay, max_delay, jitter
+                    )
                     await asyncio.sleep(delay)
-                    retries += 1
+                    attempts += 1
 
             # Max retries exceeded, raise or if a custom handler is provided, call it and then decide what to do
-            retried_exc = RetriesExceededError(retries, max_retries, last_exception)
+            retried_exc = AttemptsExceededError(attempts, max_attempts, last_exception)
             if on_permanent_failure is None:
                 raise retried_exc
-            perm_rv = await on_permanent_failure(retries, retried_exc)
+            perm_rv = await on_permanent_failure(attempts, retried_exc)
             if isinstance(perm_rv, Exception):
                 raise perm_rv
             return perm_rv

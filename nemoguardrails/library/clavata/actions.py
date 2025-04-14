@@ -126,12 +126,26 @@ def get_clavata_config(config: Any) -> ClavataRailConfig:
     return cast(ClavataRailConfig, config.rails.config.clavata)
 
 
-def get_policy_id(policy: str, config: ClavataRailConfig) -> uuid.UUID:
+def get_policy_id(
+    config: ClavataRailConfig,
+    policy: str | None = None,
+    rail: Optional[ValidRailsType] = None,
+) -> uuid.UUID:
     """
     Get Policy ID will check the input policy. If the input is already a UUID, that UUID will be used. Otherwise,
     the config will be checked to try to match the input policy alias to a policy ID. If no match is found, an error
     will be raised.
     """
+    if policy is None:
+        if rail is not None:
+            policy_name = getattr(config, rail).policy
+            return get_policy_id(config, policy_name)
+
+        raise ClavataPluginValueError(
+            "'policy' is required, or 'rail' must be provided."
+        )
+
+    # Policy was provided, so we try to convert to a UUID
     try:
         return uuid.UUID(policy)
     except ValueError:
@@ -139,19 +153,61 @@ def get_policy_id(policy: str, config: ClavataRailConfig) -> uuid.UUID:
 
     # Not a valid UUID, try to match the provided alias to a policy ID and return that
     try:
-        for p in config.policies:
-            if p.alias == policy:
-                return uuid.UUID(p.id)
+        policy_id = config.policies.get(policy)
+        if policy_id is None:
+            raise ClavataPluginValueError(f"Policy with alias '{policy}' not found.")
+        return uuid.UUID(policy_id)
     except ValueError as e:
         # Specifically catch the ValueError for badly formed UUIDs so we can provide a more helpful error message
         if "badly formed" in str(e):
             raise ClavataPluginConfigurationError(
-                f"Policy ID '{p.id}' for alias '{policy}' is not a valid UUID. Please check the Clavata configuration."
+                f"Policy ID '{policy_id}' for alias '{policy}' is not a valid UUID. "
+                "Please check the Clavata configuration."
             ) from e
         raise
 
-    # No match found
-    raise ClavataPluginValueError(f"Policy with alias '{policy}' not found.")
+
+def get_labels(
+    config: ClavataRailConfig,
+    labels: Optional[List[str] | str] = None,
+    rail: Optional[ValidRailsType] = None,
+) -> List[str]:
+    """
+    Checks whether the provided text matches the specified Clavata policy ID.
+    Note that this action will return True if any label in the policy matches the text.
+    """
+    # If labels is provided, just return them
+    if labels is not None:
+        if isinstance(labels, str):
+            # If a string, we'll convert it to a list
+            labels = labels.split(",")
+        return labels
+
+    # If labels are not provided, we need to get them from the config
+    if rail is None:
+        raise ClavataPluginValueError("Rail is required when labels are not provided.")
+
+    rail_config: ClavataRailOptions = getattr(config, rail)
+    labels = rail_config.labels
+    return labels
+
+
+def is_label_match(
+    result: PolicyResult,
+    labels: List[str],
+    clavata_config: ClavataRailConfig,
+) -> bool:
+    """Check whether the labels matched the policy"""
+    labels_to_match = set(labels)
+    labels_matched = set(lbl.label for lbl in result.label_matches if lbl.matched)
+
+    match_all = clavata_config.label_match_logic == "ALL"
+    if match_all:
+        return labels_to_match.issubset(labels_matched)
+
+    # If matching any of the labels is fine, then we can just check whether
+    # there is any intersection between the labels to match and the labels that matched
+    return bool(labels_to_match.intersection(labels_matched))
 
 
 def get_server_endpoint(config: ClavataRailConfig) -> str:
@@ -182,7 +238,7 @@ async def evaluate_with_policy(
 async def clavata_check(
     text: str,
     policy: str | None = None,
-    labels: Optional[List[str]] = None,
+    labels: Optional[List[str] | str] = None,
     rail: ValidRailsType | None = None,
     config: Optional[RailsConfig] = None,
     **kwargs: Any,
@@ -194,134 +250,22 @@ async def clavata_check(
     if not text:
         raise ClavataPluginValueError("Text to evaluate is required.")
 
-    # Which parameters will be received depends on whether the call is coming from colang 1.0 or 2.0
-    # If the call is coming from colang 1.0, then the parameters will be text, rail, config
-    # If the call is coming from colang 2.0, then the parameters will be text, policy, labels, config
-    if rail is not None:
-        # Colang 1.0
-        return await clavata_check_v1(text, rail, config)
-
-    # Colang 2.0
-    return await clavata_check_v2(text, policy, labels, config)
-
-
-async def clavata_check_v1(
-    text: str,
-    rail: ValidRailsType,
-    config: Optional[RailsConfig] = None,
-    **kwargs: Any,
-) -> bool:
-    """
-    Handles checking for v1 rails
-    """
-    if config is None:
-        raise ClavataPluginValueError("Rails config is required.")
-
-    if rail not in VALID_RAILS:
-        raise ClavataPluginValueError(f"Invalid rail: {rail}")
-
+    # Grab the Clavata Config
     clavata_config = get_clavata_config(config)
 
-    # Grab the correct rail config based on the rail and get the policy name
-    try:
-        policy_name = getattr(clavata_config, rail).policy
-        policy_id = get_policy_id(policy_name, clavata_config)
-    except AttributeError as e:
-        raise ClavataPluginConfigurationError(
-            f"Policy is not defined for rail: {rail}"
-        ) from e
+    # We should have received either a policy and label as params, or a rail that will tell us how to get
+    # the policy and labels from the config.
+    policy_id = get_policy_id(clavata_config, policy, rail)
 
-    result = await detect_policy_match(policy_id.hex, text, config)
-    labels = get_labels(clavata_config, rail=rail)
+    # Try to get the labels either from the provided labels or from the rails config
+    try:
+        labels = get_labels(clavata_config, labels=labels, rail=rail)
+    except ClavataPluginValueError:
+        labels = None
+
+    result = await evaluate_with_policy(text, policy_id.hex, clavata_config)
+
     if labels:
-        # If labels are provided, we need to check whether the labels themselves matched
         return is_label_match(result, labels, clavata_config)
 
     return result.policy_matched
-
-
-async def clavata_check_v2(
-    text: str,
-    policy: str | None,
-    labels: Optional[List[str]] = None,
-    config: Optional[RailsConfig] = None,
-    **kwargs: Any,
-) -> bool:
-    """Check for matches against a Clavata policy."""
-    if not config:
-        raise ClavataPluginValueError("Rails config is required.")
-
-    if policy is None:
-        raise ClavataPluginValueError("Policy is required.")
-
-    clavata_config = get_clavata_config(config)
-    policy_id = get_policy_id(policy, clavata_config)
-    policy_result = await evaluate_with_policy(text, str(policy_id), clavata_config)
-
-    if labels and labels != "":
-        return is_label_match(policy_result, labels, clavata_config)
-
-    return policy_result.policy_matched
-
-
-def get_labels(
-    config: ClavataRailConfig,
-    labels: Optional[List[str]] = None,
-    rail: Optional[ValidRailsType] = None,
-) -> List[str]:
-    """
-    Checks whether the provided text matches the specified Clavata policy ID.
-    Note that this action will return True if any label in the policy matches the text.
-    """
-    # If labels is provided, just return them
-    if labels is not None:
-        return labels
-
-    # If labels are not provided, we need to get them from the config
-    if rail is None:
-        raise ClavataPluginValueError("Rail is required when labels are not provided.")
-
-    rail_config: ClavataRailOptions = getattr(config, rail)
-    labels = rail_config.labels
-    if labels is None:
-        raise ClavataPluginValueError(f"Labels are not defined for rail: {rail}")
-
-    return labels
-
-
-def is_label_match(
-    result: PolicyResult,
-    labels: List[str] | str,
-    clavata_config: ClavataRailConfig,
-) -> bool:
-    """Check whether the labels matched the policy"""
-    labels_to_match = set(labels.split(",")) if isinstance(labels, str) else set(labels)
-    labels_matched = set(lbl.label for lbl in result.label_matches if lbl.matched)
-
-    match_all = clavata_config.label_match_logic == "ALL"
-    if match_all:
-        return labels_to_match.issubset(labels_matched)
-
-    # If matching any of the labels is fine, then we can just check whether
-    # there is any intersection between the labels to match and the labels that matched
-    return bool(labels_to_match.intersection(labels_matched))
-
-
-async def detect_policy_match(
-    policy: str, text: str, config: RailsConfig
-) -> PolicyResult:
-    """
-    Checks whether the provided text matches the specified Clavata policy ID.
-    Note that this action will return True if any label in the policy matches the text.
-
-    Args:
-        policy: The policy ID to check.
-        text: The text to check.
-        config: The rails configuration object (injected by runtime)
-
-    Returns:
-        True if the text matches the specified Clavata policy ID, False otherwise.
-    """
-    clavata_config = get_clavata_config(config)
-    policy_id = get_policy_id(policy, clavata_config)
-    return await evaluate_with_policy(text, str(policy_id), clavata_config)

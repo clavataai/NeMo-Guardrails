@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime
 from typing import Any, Dict, Optional
 
 import pytest
@@ -68,8 +67,7 @@ def test_clavata_no_active_policy_check(monkeypatch):
               config:
                 clavata:
                   policies:
-                    - alias: Violence
-                      id: 00000000-0000-0000-0000-000000000000
+                    Violence: 00000000-0000-0000-0000-000000000000
         """,
         colang_content=BASE_COLANG,
     )
@@ -100,8 +98,7 @@ async def test_clavata_input_policy_check(monkeypatch):
               config:
                 clavata:
                   policies:
-                    - alias: AnimalSounds
-                      id: 00000000-0000-0000-0000-000000000000
+                    AnimalSounds: 00000000-0000-0000-0000-000000000000
                   input:
                     policy: AnimalSounds
               input:
@@ -150,8 +147,7 @@ async def test_clavata_label_match_logic_any(monkeypatch):
               config:
                 clavata:
                   policies:
-                    - alias: AnimalSoundsPolicy
-                      id: 00000000-0000-0000-0000-000000000000
+                    AnimalSoundsPolicy: 00000000-0000-0000-0000-000000000000
                   input:
                     policy: AnimalSoundsPolicy
                     labels:
@@ -206,8 +202,7 @@ async def test_clavata_label_match_logic_any_no_match(monkeypatch):
               config:
                 clavata:
                   policies:
-                    - alias: AnimalSoundsPolicy
-                      id: 00000000-0000-0000-0000-000000000000
+                    AnimalSoundsPolicy: 00000000-0000-0000-0000-000000000000
                   input:
                     policy: AnimalSoundsPolicy
                     labels:
@@ -260,8 +255,7 @@ async def test_clavata_label_match_logic_all(monkeypatch):
               config:
                 clavata:
                   policies:
-                    - alias: AnimalSoundsPolicy
-                      id: 00000000-0000-0000-0000-000000000000
+                    AnimalSoundsPolicy: 00000000-0000-0000-0000-000000000000
                   label_match_logic: ALL
                   input:
                     policy: AnimalSoundsPolicy
@@ -320,8 +314,7 @@ async def test_clavata_label_match_logic_all_partial_match(monkeypatch):
               config:
                 clavata:
                   policies:
-                    - alias: AnimalSoundsPolicy
-                      id: 00000000-0000-0000-0000-000000000000
+                    AnimalSoundsPolicy: 00000000-0000-0000-0000-000000000000
                   label_match_logic: ALL
                   input:
                     policy: AnimalSoundsPolicy
@@ -377,8 +370,7 @@ async def test_clavata_empty_labels(monkeypatch):
               config:
                 clavata:
                   policies:
-                    - alias: AnimalSoundsPolicy
-                      id: 00000000-0000-0000-0000-000000000000
+                    AnimalSoundsPolicy: 00000000-0000-0000-0000-000000000000
                   input:
                     policy: AnimalSoundsPolicy
                     # No labels specified, so any policy match should block
@@ -426,8 +418,7 @@ async def test_clavata_policy_no_match(monkeypatch):
               config:
                 clavata:
                   policies:
-                    - alias: AnimalSoundsPolicy
-                      id: 00000000-0000-0000-0000-000000000000
+                    AnimalSoundsPolicy: 00000000-0000-0000-0000-000000000000
                   input:
                     policy: AnimalSoundsPolicy
               input:

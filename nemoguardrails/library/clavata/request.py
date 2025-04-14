@@ -152,7 +152,9 @@ class ClavataClient:
     def _get_headers(self) -> Dict[str, str]:
         return AuthHeader(api_key=self.api_key).to_headers()
 
-    @exponential_backoff(retry_exceptions=(ClavataPluginAPIRateLimitError,))
+    @exponential_backoff(
+        initial_delay=0.1, retry_exceptions=(ClavataPluginAPIRateLimitError,)
+    )
     async def _make_request(
         self,
         endpoint: str,

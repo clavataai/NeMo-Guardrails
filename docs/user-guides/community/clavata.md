@@ -1,12 +1,14 @@
 # Clavata Integration
 
-[Clavata](https://clavata.ai) provides content moderation capabilities to detect and filter inappropriate content. This integration enables NeMo Guardrails to use Clavata for content moderation in input and output flows.
+[Clavata](https://clavata.ai) provides real-time moderation capabilities allowing anyone to detect and filter content. The exact rules of what to filter are up to you, but we do provide a number of rulesets for common issues.
+
+This integration enables NeMo Guardrails to use Clavata for content moderation, topic moderation, and dialog moderation in both input and output flows.
 
 ## Getting Access
 
 To sign up for Clavata or obtain an API key:
 
-- [Request access](https://www.clavata.ai/requestaccess) through the website
+- [Request access](https://www.clavata.ai/) through the website
 - Contact support at <hello@clavata.ai>
 
 ## Setup
@@ -29,10 +31,8 @@ rails:
   config:
     clavata:
       policies:
-        - alias: Threats
-          id: 00000000-0000-0000-0000-000000000000
-        - alias: Toxicity
-          id: 00000000-0000-0000-0000-000000000000
+        Threats: 00000000-0000-0000-0000-000000000000
+        Toxicity: 00000000-0000-0000-0000-000000000000
       label_match_logic: ALL  # "ALL" | "ANY"
       input:
         # Reference an alias above in `policies`
@@ -57,7 +57,7 @@ rails:
 ## Configuration Details
 
 - `server_endpoint`: The Clavata API endpoint (only if provided by Clavata.ai)
-- `policies`: List of policy configurations with aliases and IDs
+- `policies`: Map of policy aliases to each policy's unique ID in your Clavata.ai account
 - `label_match_logic`: (Optional) `ALL` requires all labels specified for a rail to match, `ANY` requires at least one match. Defaults to `ANY` if not set.
 - `input/output`: Flow-specific configurations
   - `policy`: The policy alias to use for this flow
@@ -96,25 +96,22 @@ import nemoguardrails.library.clavata
 
 # Check the input against the "Toxicity" policy
 flow input rails $input_text
-    clavata check input for $input_text Toxicity
+    clavata check for ($input_text, Toxicity)
 
 # To make the check even more strict so it only matches particular labels in the policy, you can add a comma-separated list of labels at the end:
 flow input rails $input_text
-    clavata check input for $input_text Toxicity "Hate Speech,Harassment"
+    clavata check for ($input_text, Toxicity, ["Hate Speech","Harassment"])
 ```
 
-> The same is true for `output` flows, of course. See [our example](/examples/configs/clavata/rails.co) for more.
+> The same is true for `output` flows, of course. See [our example](../../../examples/configs/clavata_v2/rails.co) for more.
 
 ### 2. Programmatic Usage
 
-Use the `clavata_check_v1` in your Colang flows to check content using the Colang 1.0 action. You can also use the `clavata_check_v2` action in your own flows if you are using Colang 2.0.
+If you are using colang 2.x, you can make use of the Clavata action in your own flows:
 
 ```colang
-# Check input content
-$is_match = await ClavataCheckV2Action(text=$user_message, policy="Threats")
-
-# Check output content
-$is_match = await ClavataCheckV2Action(text=$bot_message, policy="Toxicity")
+# Check content
+$is_match = await ClavataCheckAction(text=$some_text, policy=$some_policy_alias)
 ```
 
 The action returns `True` if the content matches the specified policy's criteria.

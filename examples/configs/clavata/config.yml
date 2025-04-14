@@ -8,10 +8,8 @@ rails:
   config:
     clavata:
       policies:
-        - alias: Threats
-          id: 00000000-0000-0000-0000-000000000000
-        - alias: Toxicity
-          id: 00000000-0000-0000-0000-000000000000
+        Threats: 00000000-0000-0000-0000-000000000000
+        Toxicity: 00000000-0000-0000-0000-000000000000
       # With colang 1.0, we can't pass parameters to flows, so we need to specify the policy to use
       # in the input and output rails.
       input:

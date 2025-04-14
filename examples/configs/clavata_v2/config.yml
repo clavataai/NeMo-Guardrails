@@ -9,9 +9,7 @@ rails:
   config:
     clavata:
       policies:
-        - alias: Threats
-          id: 00000000-0000-0000-0000-000000000000
-        - alias: Toxicity
-          id: 00000000-0000-0000-0000-000000000000
+        Threats: 00000000-0000-0000-0000-000000000000
+        Toxicity: 00000000-0000-0000-0000-000000000000
       # Optional [ALL, ANY], defaults to ANY. When set to ALL, all labels must match for rail to trigger.
       label_match_logic: ANY
