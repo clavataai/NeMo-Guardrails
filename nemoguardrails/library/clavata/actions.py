@@ -263,7 +263,7 @@ async def clavata_check(
     except ClavataPluginValueError:
         labels = None
 
-    result = await evaluate_with_policy(text, policy_id.hex, clavata_config)
+    result = await evaluate_with_policy(text, str(policy_id), clavata_config)
 
     if labels:
         return is_label_match(result, labels, clavata_config)
