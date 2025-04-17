@@ -344,8 +344,6 @@ async def test_clavata_label_match_logic_all_partial_match(monkeypatch):
             labels={"DogBarking": True, "CatMeowing": True, "CowMooing": False},
         )
 
-        print("!!!", mock_response)
-
         m.post(
             "https://gateway.app.clavata.ai:8443/v1/jobs",
             payload=mock_response,

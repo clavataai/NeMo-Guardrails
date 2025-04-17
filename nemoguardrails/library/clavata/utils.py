@@ -17,7 +17,10 @@ import asyncio
 import random
 from collections.abc import Awaitable, Callable, Iterable
 from functools import wraps
-from typing import Any, Optional, ParamSpec, TypeVar
+from typing import Any, Optional, TypeVar, Union
+
+# Import ParamSpec from typing_extensions for Python 3.9 compatibility
+from typing_extensions import ParamSpec
 
 from .errs import ClavataPluginTypeError
 
@@ -82,7 +85,7 @@ def exponential_backoff(
     initial_delay: float = 1.0,
     max_delay: float = 10.0,
     jitter: bool = True,  # Set to False to disable jitter
-    retry_exceptions: type[Exception] | Iterable[type[Exception]] = Exception,
+    retry_exceptions: Union[type[Exception], Iterable[type[Exception]]] = Exception,
     on_permanent_failure: Optional[Callable[[int, Exception], Awaitable[Any]]] = None,
 ):
     """Exponential backoff retry mechanism."""
