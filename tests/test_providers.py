@@ -13,10 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# NeMo endpoint URLs
-NEMO_API_URL_GPT_43B_002 = (
-    "https://api.llm.ngc.nvidia.com/v1/models/gpt-43b-002/completions"
-)
-NEMO_API_URL_GPT_43B_905 = (
-    "https://api.llm.ngc.nvidia.com/v1/models/gpt-43b-905/completions"
-)
+import pytest
+
+from nemoguardrails.llm.providers.providers import _llm_providers
+
+
+def test_acall_method_added():
+    for provider_name, provider_cls in _llm_providers.items():
+        assert hasattr(provider_cls, "_acall"), f"_acall not added to {provider_name}"
+        assert callable(
+            getattr(provider_cls, "_acall")
+        ), f"_acall is not callable in {provider_name}"

@@ -8,11 +8,11 @@ on:
       - ".github/**"
 
 jobs:
-  call-tests:
+  pr-tests-matrix:
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         include:
           - os: Ubuntu
             image: ubuntu-latest
@@ -22,3 +22,10 @@ jobs:
       os: ${{ matrix.os }}
       image: ${{ matrix.image }}
       python-version: ${{ matrix.python-version }}
+  pr-tests-summary:
+    name: PR Tests Summary
+    needs: pr-tests-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm all PR tests passed
+        run: echo "All PR Tests completed successfully"
