@@ -25,7 +25,6 @@ import yaml
 from pydantic import (
     BaseModel,
     ConfigDict,
-    HttpUrl,
     ValidationError,
     model_validator,
     root_validator,
@@ -617,8 +616,8 @@ class ClavataRailOptions(BaseModel):
 class ClavataRailConfig(BaseModel):
     """Configuration data for the Clavata API"""
 
-    server_endpoint: HttpUrl = Field(
-        default=HttpUrl("https://gateway.app.clavata.ai:8443"),
+    server_endpoint: str = Field(
+        default="https://gateway.app.clavata.ai:8443",
         description="The endpoint for the Clavata API",
     )
 
