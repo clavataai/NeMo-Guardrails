@@ -17,7 +17,7 @@
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, List, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, List, Literal, Optional, Union, cast
 
 from pydantic import BaseModel, Field
 
@@ -128,7 +128,7 @@ def get_clavata_config(config: Any) -> ClavataRailConfig:
 
 def get_policy_id(
     config: ClavataRailConfig,
-    policy: str | None = None,
+    policy: Union[str, None] = None,
     rail: Optional[ValidRailsType] = None,
 ) -> uuid.UUID:
     """
@@ -169,7 +169,7 @@ def get_policy_id(
 
 def get_labels(
     config: ClavataRailConfig,
-    labels: Optional[List[str] | str] = None,
+    labels: Optional[Union[List[str], str]] = None,
     rail: Optional[ValidRailsType] = None,
 ) -> List[str]:
     """
@@ -237,9 +237,9 @@ async def evaluate_with_policy(
 @action(name="ClavataCheckAction")
 async def clavata_check(
     text: str,
-    policy: str | None = None,
-    labels: Optional[List[str] | str] = None,
-    rail: ValidRailsType | None = None,
+    policy: Union[str, None] = None,
+    labels: Optional[Union[List[str], str]] = None,
+    rail: Union[ValidRailsType, None] = None,
     config: Optional[RailsConfig] = None,
     **kwargs: Any,
 ) -> bool:
